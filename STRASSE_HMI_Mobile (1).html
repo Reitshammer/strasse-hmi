@@ -1,0 +1,1163 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>STRASSE — Mobile HMI</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;500;600&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+:root {
+  --bg:       #080c0e;
+  --bg2:      #0d1417;
+  --panel:    #101820;
+  --border:   #1a2f40;
+  --border2:  #243d52;
+  --accent:   #00c8ff;
+  --accent2:  #00ff88;
+  --warn:     #ffaa00;
+  --danger:   #ff3c3c;
+  --text:     #b8cfd8;
+  --text2:    #5a7f98;
+  --text3:    #2e4a5e;
+  --white:    #e4f2f8;
+  --ok:       #00d970;
+  --font-h:   'Rajdhani', sans-serif;
+  --font-m:   'Share Tech Mono', monospace;
+  --font-b:   'Barlow Condensed', sans-serif;
+  /* Safe areas for notch/home bar */
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-b);
+  overflow: hidden;
+  touch-action: manipulation;
+}
+
+/* ── PAGE STRUCTURE ──────────────────────────────── */
+.app {
+  display: flex;
+  flex-direction: column;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+}
+
+/* ── TOPBAR ──────────────────────────────────────── */
+.topbar {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+  gap: 10px;
+  flex-shrink: 0;
+  min-height: 46px;
+}
+.logo {
+  font-family: var(--font-h);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  color: var(--accent);
+  text-shadow: 0 0 16px rgba(0,200,255,0.45);
+}
+.logo small {
+  font-size: 9px;
+  color: var(--text2);
+  letter-spacing: 1px;
+  font-weight: 400;
+  margin-left: 6px;
+}
+.topbar-mid { flex: 1; }
+.status-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+  box-shadow: 0 0 8px var(--ok);
+  animation: blink 2s ease-in-out infinite;
+  flex-shrink: 0;
+}
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.25} }
+.clock {
+  font-family: var(--font-m);
+  font-size: 11px;
+  color: var(--text2);
+  letter-spacing: 1px;
+}
+
+/* ── CAMERA AREA ─────────────────────────────────── */
+.camera-wrap {
+  position: relative;
+  flex: 1;
+  background: #030607;
+  overflow: hidden;
+  min-height: 0;
+}
+
+video#camFeed {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  transform: scaleX(-1); /* mirror front cam */
+}
+
+/* Overlay canvas for CV visualization */
+canvas#overlayCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+}
+
+/* HUD elements over camera */
+.cam-hud-tl {
+  position: absolute;
+  top: 10px; left: 10px;
+  font-family: var(--font-m);
+  font-size: 9px;
+  color: rgba(0,200,255,0.7);
+  line-height: 1.8;
+  pointer-events: none;
+}
+.cam-hud-tr {
+  position: absolute;
+  top: 10px; right: 10px;
+  font-family: var(--font-m);
+  font-size: 9px;
+  color: rgba(0,200,255,0.7);
+  line-height: 1.8;
+  text-align: right;
+  pointer-events: none;
+}
+.cam-hud-bl {
+  position: absolute;
+  bottom: 10px; left: 10px;
+  pointer-events: none;
+}
+.cam-hud-bc {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+}
+.cam-hud-br {
+  position: absolute;
+  bottom: 10px; right: 10px;
+  font-family: var(--font-m);
+  font-size: 9px;
+  color: rgba(0,200,255,0.6);
+  text-align: right;
+  line-height: 1.8;
+  pointer-events: none;
+}
+
+/* Detection status badge */
+.detect-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(0,200,255,0.3);
+  border-radius: 3px;
+  padding: 4px 8px;
+  backdrop-filter: blur(4px);
+}
+.detect-badge .dot {
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--accent2);
+  box-shadow: 0 0 6px var(--accent2);
+  animation: blink 1.5s ease-in-out infinite;
+}
+.detect-badge span {
+  font-family: var(--font-m);
+  font-size: 9px;
+  color: var(--accent2);
+  letter-spacing: 1px;
+}
+
+/* Confidence bar overlay */
+.conf-overlay {
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(0,200,255,0.2);
+  border-radius: 3px;
+  padding: 4px 8px;
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.conf-overlay .c-label { font-family: var(--font-m); font-size: 8px; color: var(--text3); letter-spacing: 1px; }
+.conf-track { width: 70px; height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; }
+.conf-track-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, #00aa55, var(--accent2)); transition: width 0.5s; }
+.conf-pct { font-family: var(--font-m); font-size: 9px; color: var(--accent2); min-width: 26px; }
+
+/* Offset indicator overlay */
+.offset-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0; right: 0;
+  background: rgba(8,12,14,0.82);
+  border-top: 1px solid var(--border);
+  padding: 6px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  backdrop-filter: blur(6px);
+  flex-shrink: 0;
+}
+.off-label { font-family: var(--font-m); font-size: 8px; color: var(--text3); letter-spacing: 1px; min-width: 60px; flex-shrink: 0; }
+.off-track {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  position: relative;
+}
+.off-center {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%,-50%);
+  width: 2px; height: 10px;
+  background: var(--text3); border-radius: 1px;
+}
+.off-dot {
+  position: absolute; top: 50%;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px rgba(0,200,255,0.6);
+  transform: translate(-50%,-50%);
+  transition: left 0.3s ease, background 0.3s;
+}
+.off-dot.warn { background: var(--warn); box-shadow: 0 0 6px rgba(255,170,0,0.6); }
+.off-val { font-family: var(--font-m); font-size: 12px; color: var(--white); min-width: 50px; text-align: right; flex-shrink: 0; }
+.off-val.warn { color: var(--warn); }
+
+/* Camera switch button */
+.cam-switch-btn {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.55);
+  border: 1px solid rgba(0,200,255,0.25);
+  border-radius: 20px;
+  padding: 5px 12px;
+  font-family: var(--font-m);
+  font-size: 9px;
+  color: var(--accent);
+  letter-spacing: 1px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* No camera fallback */
+.no-cam {
+  width: 100%; height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  position: absolute;
+  inset: 0;
+}
+.road-sim-mobile {
+  width: 100%; height: 100%;
+  background: repeating-linear-gradient(180deg, #181818 0px, #141414 20px, #121212 40px);
+  position: absolute;
+  animation: road-scroll 1.5s linear infinite;
+}
+@keyframes road-scroll { from{background-position:0 0} to{background-position:0 60px} }
+.road-line-old {
+  position: absolute;
+  left: 50%; top: 0; bottom: 0;
+  transform: translateX(-50%);
+  width: 14px;
+  background: repeating-linear-gradient(180deg,
+    rgba(200,180,80,0.15) 0px, rgba(200,180,80,0.07) 28px,
+    transparent 28px, transparent 56px);
+  animation: road-scroll 1.5s linear infinite;
+}
+.road-line-new {
+  position: absolute;
+  left: 50%; top: 0; bottom: 0;
+  transform: translateX(-50%);
+  width: 14px;
+  background: linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.92) 60%, rgba(255,255,255,0.95) 100%);
+  transition: left 0.3s ease, opacity 0.3s;
+  opacity: 0;
+}
+.road-line-new.show { opacity: 1; }
+.cam-request {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: rgba(8,12,14,0.85);
+  backdrop-filter: blur(4px);
+  z-index: 5;
+}
+.cam-request p { font-family: var(--font-m); font-size: 10px; color: var(--text2); letter-spacing: 1px; text-align: center; }
+.cam-req-btn {
+  padding: 12px 24px;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: rgba(0,200,255,0.08);
+  color: var(--accent);
+  font-family: var(--font-h);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+}
+.cam-req-btn:active { opacity: 0.7; }
+
+/* ── BOTTOM TABS ─────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.tab {
+  flex: 1;
+  padding: 8px 4px 6px;
+  text-align: center;
+  font-family: var(--font-m);
+  font-size: 8px;
+  color: var(--text3);
+  letter-spacing: 1px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  text-transform: uppercase;
+  transition: all 0.15s;
+}
+.tab .tab-icon { font-size: 16px; display: block; margin-bottom: 2px; }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.tab:active { opacity: 0.6; }
+
+/* ── PANEL PAGES ─────────────────────────────────── */
+.panels {
+  background: var(--bg);
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative;
+}
+.panel {
+  display: none;
+  padding: 10px 12px;
+  gap: 10px;
+  overflow-y: auto;
+  max-height: 100%;
+}
+.panel.active { display: flex; flex-direction: column; }
+
+/* ── PANEL: STEUERUNG ─────────────────────────────── */
+.spray-btn-mobile {
+  width: 100%;
+  padding: 18px;
+  border: 2px solid var(--accent2);
+  border-radius: 6px;
+  background: rgba(0,255,136,0.05);
+  color: var(--accent2);
+  font-family: var(--font-h);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+}
+.spray-btn-mobile:active { transform: scale(0.97); }
+.spray-btn-mobile.active {
+  background: rgba(0,255,136,0.15);
+  box-shadow: 0 0 30px rgba(0,255,136,0.25);
+  animation: spray-glow 0.6s ease-in-out infinite alternate;
+}
+@keyframes spray-glow {
+  from { box-shadow: 0 0 20px rgba(0,255,136,0.15); }
+  to   { box-shadow: 0 0 40px rgba(0,255,136,0.35); }
+}
+
+.mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.mode-btn {
+  padding: 14px 8px;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  background: var(--bg2);
+  color: var(--text2);
+  font-family: var(--font-h);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+.mode-btn .icon { font-size: 20px; }
+.mode-btn:active { transform: scale(0.96); }
+.mode-btn.active {
+  background: rgba(0,200,255,0.08);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 10px rgba(0,200,255,0.12);
+}
+
+.notaus-mobile {
+  width: 100%;
+  padding: 16px;
+  border: 2px solid var(--danger);
+  border-radius: 6px;
+  background: rgba(255,60,60,0.06);
+  color: var(--danger);
+  font-family: var(--font-h);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 3px;
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+}
+.notaus-mobile:active { background: rgba(255,60,60,0.2); }
+
+/* ── PANEL: PARAMETER ─────────────────────────────── */
+.param-section { }
+.p-label {
+  font-family: var(--font-m);
+  font-size: 8px;
+  color: var(--text3);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.slider-row {
+  margin-bottom: 14px;
+}
+.slider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 6px;
+}
+.slider-name { font-size: 11px; color: var(--text2); font-family: var(--font-m); }
+.slider-val { font-size: 14px; font-family: var(--font-m); color: var(--white); font-weight: 600; }
+input[type=range] {
+  width: 100%;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 5px;
+  border-radius: 3px;
+  background: var(--border);
+  outline: none;
+  cursor: pointer;
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 10px rgba(0,200,255,0.5);
+  cursor: pointer;
+}
+input[type=range].green::-webkit-slider-thumb {
+  background: var(--accent2);
+  box-shadow: 0 0 10px rgba(0,255,136,0.5);
+}
+
+/* ── PANEL: DATEN ─────────────────────────────────── */
+.data-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.data-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 10px 12px;
+}
+.dc-label { font-family: var(--font-m); font-size: 8px; color: var(--text3); letter-spacing: 1px; margin-bottom: 4px; }
+.dc-value { font-family: var(--font-m); font-size: 20px; color: var(--white); font-weight: 600; line-height: 1; }
+.dc-value.accent { color: var(--accent); }
+.dc-value.green  { color: var(--accent2); }
+.dc-value.warn   { color: var(--warn); }
+.dc-unit { font-size: 10px; color: var(--text3); }
+
+.qs-card {
+  background: var(--bg2);
+  border: 1px solid rgba(0,255,136,0.15);
+  border-radius: 5px;
+  padding: 10px 12px;
+  grid-column: 1 / -1;
+}
+.qs-title { font-family: var(--font-m); font-size: 8px; color: rgba(0,255,136,0.5); letter-spacing: 2px; margin-bottom: 8px; }
+.qs-row-m {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.qs-row-m:last-child { margin-bottom: 0; }
+.qs-row-m .ql { font-family: var(--font-m); font-size: 9px; color: var(--text3); letter-spacing: 0.5px; }
+.qs-row-m .qv { font-family: var(--font-m); font-size: 13px; color: var(--white); }
+.qs-badge {
+  padding: 2px 7px; border-radius: 2px;
+  font-family: var(--font-m); font-size: 8px; letter-spacing: 1px;
+}
+.qs-badge.ok    { background: rgba(0,217,112,0.1);  color: var(--ok);     border: 1px solid rgba(0,217,112,0.25); }
+.qs-badge.warn  { background: rgba(255,170,0,0.1);  color: var(--warn);   border: 1px solid rgba(255,170,0,0.25); }
+.qs-badge.error { background: rgba(255,60,60,0.1);  color: var(--danger); border: 1px solid rgba(255,60,60,0.25); }
+
+/* ── PANEL: LOG ───────────────────────────────────── */
+.log-list {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 8px 10px;
+  max-height: 100%;
+  overflow-y: auto;
+  flex: 1;
+}
+.log-entry {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-family: var(--font-m);
+  font-size: 9px;
+  line-height: 1.5;
+}
+.log-t { color: var(--text3); flex-shrink: 0; }
+.log-m { color: var(--text2); }
+.log-m.ok   { color: var(--ok); }
+.log-m.warn { color: var(--warn); }
+.log-m.info { color: var(--accent); }
+
+/* ── GPS ─────────────────────────────────────────── */
+.gps-box {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 10px 12px;
+  font-family: var(--font-m);
+  font-size: 10px;
+  color: var(--text2);
+  line-height: 2;
+  grid-column: 1 / -1;
+}
+.gps-box .h { color: var(--accent2); }
+
+/* ── EMERGENCY OVERLAY ───────────────────────────── */
+.emg-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(255,0,0,0.1);
+  border: 3px solid var(--danger);
+  z-index: 999;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.emg-overlay.show { display: flex; animation: emg-f 0.5s ease-in-out infinite alternate; }
+@keyframes emg-f { from{opacity:0.5} to{opacity:1} }
+.emg-text {
+  font-family: var(--font-h);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--danger);
+  text-shadow: 0 0 20px rgba(255,60,60,0.8);
+  letter-spacing: 4px;
+  text-align: center;
+}
+</style>
+</head>
+<body>
+
+<div class="emg-overlay" id="emgOverlay">
+  <div class="emg-text">⚠ NOT-AUS<br>AKTIV</div>
+</div>
+
+<div class="app">
+
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <div class="logo">STRASSE<small>HMI v0.9</small></div>
+    <div class="topbar-mid"></div>
+    <div class="status-dot" id="statusDot"></div>
+    <div class="clock" id="clock">--:--</div>
+  </div>
+
+  <!-- CAMERA AREA -->
+  <div class="camera-wrap" id="cameraWrap">
+
+    <!-- Simulated road (fallback / always visible under real cam) -->
+    <div id="roadSim" style="position:absolute;inset:0;display:flex;align-items:stretch;">
+      <div style="position:relative;width:100%;height:100%;overflow:hidden;">
+        <div class="road-sim-mobile"></div>
+        <div class="road-line-old"></div>
+        <div class="road-line-new" id="roadLineNew"></div>
+      </div>
+    </div>
+
+    <!-- Real camera -->
+    <video id="camFeed" autoplay playsinline muted style="display:none;position:absolute;inset:0;"></video>
+    <canvas id="overlayCanvas" style="position:absolute;inset:0;"></canvas>
+
+    <!-- Camera request screen -->
+    <div class="cam-request" id="camRequest">
+      <p>📷 KAMERA AKTIVIEREN<br>für Live-Erkennung</p>
+      <button class="cam-req-btn" onclick="startCamera()">KAMERA STARTEN</button>
+      <p style="font-size:8px;color:var(--text3);margin-top:4px;">Demo ohne Kamera läuft weiter</p>
+    </div>
+
+    <!-- Camera switch -->
+    <div class="cam-switch-btn" id="camSwitchBtn" style="display:none;" onclick="flipCamera()">
+      🔄 <span id="camSwitchLabel">REAR</span>
+    </div>
+
+    <!-- HUD overlays -->
+    <div class="cam-hud-tl" id="hudTL">
+      EXP&nbsp; AUTO<br>
+      FPS&nbsp; <span id="fps">28</span><br>
+      CAM&nbsp; <span id="camMode">SIM</span>
+    </div>
+    <div class="cam-hud-tr">
+      CLAHE&nbsp; ON<br>
+      HOUGH&nbsp; ON<br>
+      LICHT&nbsp; <span id="lux">4820</span>lx
+    </div>
+    <div class="cam-hud-bl">
+      <div class="detect-badge" id="detectBadge">
+        <div class="dot"></div>
+        <span id="detectStatus">ERKANNT</span>
+      </div>
+    </div>
+    <div class="cam-hud-bc">
+      <div class="conf-overlay">
+        <span class="c-label">KONF</span>
+        <div class="conf-track"><div class="conf-track-fill" id="confBar" style="width:87%"></div></div>
+        <span class="conf-pct" id="confPct">87%</span>
+      </div>
+    </div>
+    <div class="cam-hud-br">
+      T <span id="procMs">18</span>ms<br>
+      F <span id="frameNo">4291</span>
+    </div>
+
+    <!-- Offset bar -->
+    <div class="offset-overlay">
+      <span class="off-label">LAT-VERSATZ</span>
+      <div class="off-track">
+        <div class="off-center"></div>
+        <div class="off-dot" id="offDot" style="left:50%"></div>
+      </div>
+      <span class="off-val" id="offVal">+3 mm</span>
+    </div>
+  </div>
+
+  <!-- TAB BAR -->
+  <div class="tab-bar">
+    <div class="tab active" onclick="switchTab('ctrl',this)">
+      <span class="tab-icon">🎮</span>STEUERUNG
+    </div>
+    <div class="tab" onclick="switchTab('param',this)">
+      <span class="tab-icon">⚙</span>PARAMETER
+    </div>
+    <div class="tab" onclick="switchTab('data',this)">
+      <span class="tab-icon">📊</span>DATEN
+    </div>
+    <div class="tab" onclick="switchTab('log',this)">
+      <span class="tab-icon">📋</span>PROTOKOLL
+    </div>
+  </div>
+
+  <!-- PANELS -->
+  <div class="panels" id="panelsWrap">
+
+    <!-- STEUERUNG -->
+    <div class="panel active" id="panel-ctrl">
+      <button class="spray-btn-mobile" id="sprayBtn" onclick="toggleSpray()">
+        <span id="sprayIcon">▶</span>
+        <span id="sprayLabel">SPRÜHEN</span>
+      </button>
+      <div class="mode-grid">
+        <div class="mode-btn active" onclick="setMode('auto',this)">
+          <span class="icon">⚙</span>AUTO
+        </div>
+        <div class="mode-btn" onclick="setMode('manual',this)">
+          <span class="icon">🎮</span>MANUELL
+        </div>
+        <div class="mode-btn" onclick="setMode('scan',this)">
+          <span class="icon">📷</span>NUR SCAN
+        </div>
+        <div class="mode-btn" onclick="setMode('calib',this)">
+          <span class="icon">⊕</span>KALIB.
+        </div>
+      </div>
+      <button class="notaus-mobile" id="notausBtn" onclick="triggerEmergency()">
+        ⬡ NOT-AUS
+      </button>
+    </div>
+
+    <!-- PARAMETER -->
+    <div class="panel" id="panel-param">
+      <div class="param-section">
+        <div class="p-label">Sprühparameter</div>
+        <div class="slider-row">
+          <div class="slider-header">
+            <span class="slider-name">SPRÜHDRUCK</span>
+            <span class="slider-val" id="sl1v">3.2 bar</span>
+          </div>
+          <input type="range" min="10" max="60" value="32"
+            oninput="this.previousElementSibling.children[1].textContent=(this.value/10).toFixed(1)+' bar'">
+        </div>
+        <div class="slider-row">
+          <div class="slider-header">
+            <span class="slider-name">PUMPENRATE</span>
+            <span class="slider-val" id="sl2v">68%</span>
+          </div>
+          <input type="range" class="green" min="0" max="100" value="68"
+            oninput="this.previousElementSibling.children[1].textContent=this.value+'%'">
+        </div>
+        <div class="slider-row">
+          <div class="slider-header">
+            <span class="slider-name">SOLL-BREITE</span>
+            <span class="slider-val" id="sl3v">12.0 cm</span>
+          </div>
+          <input type="range" class="green" min="80" max="150" value="120"
+            oninput="this.previousElementSibling.children[1].textContent=(this.value/10).toFixed(1)+' cm'">
+        </div>
+      </div>
+      <div class="param-section">
+        <div class="p-label">Bildverarbeitung</div>
+        <div class="slider-row">
+          <div class="slider-header">
+            <span class="slider-name">ROI-HÖHE</span>
+            <span class="slider-val">60%</span>
+          </div>
+          <input type="range" min="30" max="90" value="60"
+            oninput="this.previousElementSibling.children[1].textContent=this.value+'%'">
+        </div>
+        <div class="slider-row">
+          <div class="slider-header">
+            <span class="slider-name">CLAHE CLIP</span>
+            <span class="slider-val">2.0</span>
+          </div>
+          <input type="range" min="10" max="80" value="20"
+            oninput="this.previousElementSibling.children[1].textContent=(this.value/10).toFixed(1)">
+        </div>
+        <div class="slider-row">
+          <div class="slider-header">
+            <span class="slider-name">HOUGH SCHWELLE</span>
+            <span class="slider-val">50</span>
+          </div>
+          <input type="range" min="20" max="150" value="50"
+            oninput="this.previousElementSibling.children[1].textContent=this.value">
+        </div>
+      </div>
+    </div>
+
+    <!-- DATEN -->
+    <div class="panel" id="panel-data">
+      <div class="data-grid">
+        <div class="data-card">
+          <div class="dc-label">GESCHWINDIGKEIT</div>
+          <div class="dc-value accent" id="dc-speed">12.4<span class="dc-unit"> km/h</span></div>
+        </div>
+        <div class="data-card">
+          <div class="dc-label">GESAMT-STRECKE</div>
+          <div class="dc-value green" id="dc-dist">248<span class="dc-unit"> m</span></div>
+        </div>
+        <div class="data-card">
+          <div class="dc-label">MARKIERT</div>
+          <div class="dc-value" id="dc-marked">183<span class="dc-unit"> m</span></div>
+        </div>
+        <div class="data-card">
+          <div class="dc-label">SEGMENTE</div>
+          <div class="dc-value accent" id="dc-seg">47</div>
+        </div>
+        <div class="data-card">
+          <div class="dc-label">ERKENNUNGSRATE</div>
+          <div class="dc-value green" id="dc-det">91.5<span class="dc-unit">%</span></div>
+        </div>
+        <div class="data-card">
+          <div class="dc-label">FARBSTAND</div>
+          <div class="dc-value warn" id="dc-paint">74<span class="dc-unit">%</span></div>
+        </div>
+        <div class="qs-card">
+          <div class="qs-title">QUALITÄTSSICHERUNG — SEKUNDÄRKAMERA</div>
+          <div class="qs-row-m">
+            <span class="ql">LINIENBREITE</span>
+            <span class="qv" id="qs-w">12.1 cm</span>
+            <span class="qs-badge ok" id="qs-wb">OK</span>
+          </div>
+          <div class="qs-row-m">
+            <span class="ql">POSITION</span>
+            <span class="qv" id="qs-p">+3 mm</span>
+            <span class="qs-badge ok" id="qs-pb">OK</span>
+          </div>
+          <div class="qs-row-m">
+            <span class="ql">AUTO-KORREKTUR</span>
+            <span class="qv" id="qs-c">+0.1 bar</span>
+            <span class="qs-badge ok">AUTO</span>
+          </div>
+        </div>
+        <div class="gps-box">
+          LAT &nbsp;&nbsp;<span class="h" id="g-lat">48.2145° N</span><br>
+          LON &nbsp;&nbsp;<span class="h" id="g-lon">13.8761° E</span><br>
+          FIX &nbsp;&nbsp;<span class="h">GPS (8 Sat.)</span><br>
+          HDOP <span class="h">0.8</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="panel" id="panel-log">
+      <div class="log-list" id="logList">
+        <div class="p-label" style="margin-bottom:8px;">SYSTEMPROTOKOLL</div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────
+let sprayActive = false;
+let emergency = false;
+let cameraStream = null;
+let facingMode = 'environment'; // start with rear camera
+let tick = 0;
+let frameNo = 4291;
+let totalDist = 248;
+let markedDist = 183;
+let segCount = 47;
+let simOffset = 3;
+let simConf = 87;
+let simWidth = 12.1;
+let simSpeed = 12.4;
+
+// ── Clock ─────────────────────────────────────────────
+function updateClock() {
+  const n = new Date();
+  document.getElementById('clock').textContent =
+    n.toLocaleTimeString('de-AT',{hour12:false,hour:'2-digit',minute:'2-digit'});
+}
+updateClock(); setInterval(updateClock, 1000);
+
+// ── Tabs ──────────────────────────────────────────────
+function switchTab(id, el) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('panel-'+id).classList.add('active');
+}
+
+// ── Responsive panel height ───────────────────────────
+function layoutPanels() {
+  const appH   = window.innerHeight;
+  const topH   = document.querySelector('.topbar').offsetHeight;
+  const camH   = Math.min(Math.max(appH * 0.42, 200), appH * 0.52);
+  const tabH   = document.querySelector('.tab-bar').offsetHeight;
+  const panelH = appH - topH - camH - tabH;
+
+  document.querySelector('.camera-wrap').style.flex = 'none';
+  document.querySelector('.camera-wrap').style.height = camH + 'px';
+  document.getElementById('panelsWrap').style.height = panelH + 'px';
+}
+layoutPanels();
+window.addEventListener('resize', layoutPanels);
+
+// ── Camera ────────────────────────────────────────────
+async function startCamera() {
+  try {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(t => t.stop());
+    }
+    const constraints = {
+      video: {
+        facingMode: { ideal: facingMode },
+        width: { ideal: 1280 },
+        height: { ideal: 720 }
+      },
+      audio: false
+    };
+    cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+    const vid = document.getElementById('camFeed');
+    vid.srcObject = cameraStream;
+    vid.style.display = 'block';
+    vid.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
+    document.getElementById('camRequest').style.display = 'none';
+    document.getElementById('camSwitchBtn').style.display = 'flex';
+    document.getElementById('camMode').textContent = facingMode === 'user' ? 'FRONT' : 'REAR';
+    document.getElementById('camSwitchLabel').textContent = facingMode === 'user' ? 'REAR' : 'FRONT';
+    addLog('Kamera aktiv: ' + (facingMode === 'user' ? 'Front' : 'Rear'), 'ok');
+    startOverlay(vid);
+  } catch(e) {
+    addLog('Kamera: ' + (e.name === 'NotAllowedError' ? 'Zugriff verweigert' : e.message), 'warn');
+    document.getElementById('camRequest').innerHTML =
+      '<p style="color:var(--warn);">⚠ Kamerazugriff nicht möglich<br><small style="color:var(--text3);">Demo-Simulation läuft weiter</small></p>';
+    setTimeout(() => { document.getElementById('camRequest').style.display = 'none'; }, 3000);
+  }
+}
+
+async function flipCamera() {
+  facingMode = facingMode === 'environment' ? 'user' : 'environment';
+  document.getElementById('camSwitchLabel').textContent = facingMode === 'user' ? 'REAR' : 'FRONT';
+  await startCamera();
+}
+
+// ── Canvas overlay (CV visualization) ────────────────
+let overlayAnim = null;
+function startOverlay(videoEl) {
+  const canvas = document.getElementById('overlayCanvas');
+  const ctx = canvas.getContext('2d');
+  let scanY = 0;
+  let roiCenterX = 0.5;
+
+  function drawOverlay() {
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+    const W = canvas.width, H = canvas.height;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Scanline
+    scanY = (scanY + 2) % H;
+    const sg = ctx.createLinearGradient(0, scanY-3, 0, scanY+3);
+    sg.addColorStop(0, 'transparent');
+    sg.addColorStop(0.5, 'rgba(0,200,255,0.12)');
+    sg.addColorStop(1, 'transparent');
+    ctx.fillStyle = sg;
+    ctx.fillRect(0, scanY-3, W, 6);
+
+    // ROI box
+    const roiTop = H * 0.3, roiBot = H * 0.85;
+    const roiL = W * 0.2, roiR = W * 0.8;
+    ctx.strokeStyle = 'rgba(0,200,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4,4]);
+    ctx.strokeRect(roiL, roiTop, roiR - roiL, roiBot - roiTop);
+    ctx.setLineDash([]);
+
+    // Corner brackets
+    const cs = 14;
+    ctx.strokeStyle = 'rgba(0,200,255,0.8)';
+    ctx.lineWidth = 2;
+    [[roiL,roiTop,1,1],[roiR,roiTop,-1,1],[roiL,roiBot,1,-1],[roiR,roiBot,-1,-1]].forEach(([x,y,dx,dy])=>{
+      ctx.beginPath(); ctx.moveTo(x,y+dy*cs); ctx.lineTo(x,y); ctx.lineTo(x+dx*cs,y); ctx.stroke();
+    });
+
+    // Crosshair H
+    ctx.strokeStyle = 'rgba(0,200,255,0.15)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(roiL, H * 0.65); ctx.lineTo(roiR, H * 0.65);
+    ctx.stroke();
+
+    // Detected line (follows sim offset)
+    roiCenterX += (0.5 + simOffset/200 - roiCenterX) * 0.15;
+    const lx = W * roiCenterX;
+    const lineG = ctx.createLinearGradient(0, 0, 0, H);
+    lineG.addColorStop(0, 'transparent');
+    lineG.addColorStop(0.3, 'rgba(0,255,136,0.6)');
+    lineG.addColorStop(1, 'rgba(0,255,136,0.4)');
+    ctx.strokeStyle = lineG;
+    ctx.lineWidth = 2;
+    ctx.shadowColor = 'rgba(0,255,136,0.5)';
+    ctx.shadowBlur = 6;
+    ctx.beginPath(); ctx.moveTo(lx, H*0.3); ctx.lineTo(lx, H*0.85); ctx.stroke();
+    ctx.shadowBlur = 0;
+
+    // Nozzle indicator
+    if (sprayActive) {
+      const nx = W * 0.5, ny = H * 0.7;
+      ctx.beginPath();
+      ctx.arc(nx, ny, 12, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(0,255,136,0.8)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.arc(nx, ny, 5, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(0,255,136,0.9)';
+      ctx.fill();
+      // Spray cone
+      ctx.beginPath();
+      ctx.moveTo(nx, ny-12);
+      ctx.lineTo(nx-18, ny-50); ctx.lineTo(nx+18, ny-50);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(200,220,255,0.12)';
+      ctx.fill();
+    }
+
+    overlayAnim = requestAnimationFrame(drawOverlay);
+  }
+  if (overlayAnim) cancelAnimationFrame(overlayAnim);
+  drawOverlay();
+}
+
+// ── Spray ─────────────────────────────────────────────
+function toggleSpray() {
+  if (emergency) return;
+  sprayActive = !sprayActive;
+  const btn = document.getElementById('sprayBtn');
+  document.getElementById('sprayIcon').textContent = sprayActive ? '⏹' : '▶';
+  document.getElementById('sprayLabel').textContent = sprayActive ? 'STOPP SPRÜHEN' : 'SPRÜHEN';
+  btn.classList.toggle('active', sprayActive);
+  document.getElementById('roadLineNew').classList.toggle('show', sprayActive);
+  addLog(sprayActive ? 'SPRÜHEN aktiviert' : 'SPRÜHEN gestoppt', sprayActive ? 'ok' : 'info');
+}
+
+// ── Mode ──────────────────────────────────────────────
+function setMode(m, el) {
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  const labels={auto:'AUTO',manual:'MANUELL',scan:'NUR SCAN',calib:'KALIBRIERUNG'};
+  addLog('Modus: ' + labels[m], 'info');
+}
+
+// ── Emergency ─────────────────────────────────────────
+function triggerEmergency() {
+  emergency = !emergency;
+  document.getElementById('emgOverlay').classList.toggle('show', emergency);
+  const btn = document.getElementById('notausBtn');
+  btn.textContent = emergency ? '↩ NOT-AUS ZURÜCKSETZEN' : '⬡ NOT-AUS';
+  btn.style.background = emergency ? 'rgba(255,60,60,0.2)' : '';
+  if (emergency && sprayActive) toggleSpray();
+  addLog(emergency ? 'NOT-AUS AKTIVIERT!' : 'NOT-AUS zurückgesetzt', emergency ? 'warn' : 'ok');
+}
+
+// ── Log ───────────────────────────────────────────────
+function addLog(msg, type) {
+  const now = new Date().toLocaleTimeString('de-AT',{hour12:false});
+  const list = document.getElementById('logList');
+  const e = document.createElement('div');
+  e.className = 'log-entry';
+  e.innerHTML = `<span class="log-t">${now}</span><span class="log-m ${type}">${msg}</span>`;
+  list.appendChild(e);
+  list.scrollTop = list.scrollHeight;
+}
+const initMsgs = [
+  ['System gestartet — alle Module OK','ok'],
+  ['Embedded Vision Plattform bereit','ok'],
+  ['Primärkamera kalibriert','ok'],
+  ['IMU initialisiert — BNO055 OK','ok'],
+  ['Datenbank: SES-2026-0241.db geöffnet','info'],
+  ['CLAHE + Hough Pipeline aktiv','ok'],
+  ['Hydraulik OK — 3.2 bar','ok'],
+  ['Kamera: Demo-Simulation aktiv','info'],
+];
+initMsgs.forEach(([m,t],i) => setTimeout(()=>addLog(m,t), i*250));
+
+// ── Simulation loop ───────────────────────────────────
+setInterval(() => {
+  if (emergency) return;
+  tick++;
+
+  // Speed
+  simSpeed += (Math.random()-0.5)*0.4;
+  simSpeed = Math.max(5, Math.min(20, simSpeed));
+  document.getElementById('dc-speed').innerHTML = simSpeed.toFixed(1)+'<span class="dc-unit"> km/h</span>';
+
+  // Distance
+  totalDist += simSpeed/3600*0.5;
+  const dm = Math.round(totalDist);
+  document.getElementById('dc-dist').innerHTML = dm+'<span class="dc-unit"> m</span>';
+
+  if (sprayActive) {
+    markedDist += simSpeed/3600*0.5;
+    document.getElementById('dc-marked').innerHTML = Math.round(markedDist)+'<span class="dc-unit"> m</span>';
+    if (tick%20===0) { segCount++; document.getElementById('dc-seg').textContent = segCount; }
+  }
+
+  // Offset
+  simOffset += (Math.random()-0.5)*5;
+  simOffset = Math.max(-50, Math.min(50, simOffset));
+  const op = 50 + (simOffset/100)*50;
+  document.getElementById('offDot').style.left = Math.max(5,Math.min(95,op))+'%';
+  const warn = Math.abs(simOffset) > 22;
+  const s = simOffset>=0?'+':'-';
+  const a = Math.abs(simOffset).toFixed(0);
+  document.getElementById('offVal').textContent = s+a+' mm';
+  document.getElementById('offVal').className = 'off-val'+(warn?' warn':'');
+  document.getElementById('offDot').className = 'off-dot'+(warn?' warn':'');
+  document.getElementById('qs-p').textContent = s+a+' mm';
+  document.getElementById('qs-pb').className = 'qs-badge '+(warn?'warn':'ok');
+  document.getElementById('qs-pb').textContent = warn?'WARN':'OK';
+
+  // Confidence
+  simConf += (Math.random()-0.5)*4;
+  simConf = Math.max(60, Math.min(98, simConf));
+  document.getElementById('confBar').style.width = simConf.toFixed(0)+'%';
+  document.getElementById('confPct').textContent = simConf.toFixed(0)+'%';
+
+  // Width
+  simWidth += (Math.random()-0.5)*0.3;
+  simWidth = Math.max(10.5, Math.min(13.5, simWidth));
+  document.getElementById('qs-w').textContent = simWidth.toFixed(1)+' cm';
+  const wOk = Math.abs(simWidth-12)<0.8;
+  document.getElementById('qs-wb').className = 'qs-badge '+(wOk?'ok':'warn');
+  document.getElementById('qs-wb').textContent = wOk?'OK':'WARN';
+  document.getElementById('qs-c').textContent = ((simWidth-12)*-0.12>=0?'+':'')+((simWidth-12)*-0.12).toFixed(2)+' bar';
+
+  // Frame / fps / proc
+  frameNo++;
+  document.getElementById('frameNo').textContent = frameNo;
+  document.getElementById('fps').textContent = Math.floor(24+Math.random()*6);
+  document.getElementById('procMs').textContent = Math.floor(13+Math.random()*10);
+  document.getElementById('lux').textContent = Math.floor(4200+Math.random()*1200);
+
+  // GPS
+  document.getElementById('g-lat').textContent = (48.2145+tick*0.000003).toFixed(4)+'° N';
+  document.getElementById('g-lon').textContent = (13.8761+tick*0.000002).toFixed(4)+'° E';
+
+  // Occasional log
+  if (tick%80===0) {
+    const msgs=[['Positionskorrektur','info'],['Pumpenrate angepasst','info'],['Frame-Buffer OK','ok']];
+    const m=msgs[Math.floor(Math.random()*msgs.length)];
+    addLog(m[0], m[1]);
+  }
+}, 500);
+
+// Start canvas on simulated road
+startOverlay(null);
+</script>
+</body>
+</html>
