@@ -125,6 +125,40 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
 .emg.show{display:flex;animation:ef .5s ease-in-out infinite alternate;}
 @keyframes ef{from{opacity:.5}to{opacity:1}}
 .emg-txt{font-family:var(--fh);font-size:30px;font-weight:700;color:var(--danger);text-shadow:0 0 20px rgba(255,60,60,.8);letter-spacing:4px;text-align:center;}
+
+/* Spray status overlay — always visible in camera area */
+.spray-status{
+  position:absolute;top:10px;left:50%;transform:translateX(-50%);
+  display:flex;align-items:center;gap:8px;
+  padding:6px 14px;border-radius:4px;backdrop-filter:blur(6px);
+  font-family:var(--fm);font-size:11px;font-weight:700;letter-spacing:2px;
+  border:1px solid rgba(80,80,80,.4);background:rgba(0,0,0,.65);
+  color:var(--tx3);pointer-events:none;transition:all .25s;z-index:10;
+}
+.spray-status.on{
+  background:rgba(0,20,10,.8);border-color:rgba(0,255,136,.6);color:var(--ac2);
+  box-shadow:0 0 20px rgba(0,255,136,.25);
+  animation:sp-glow .5s ease-in-out infinite alternate;
+}
+@keyframes sp-glow{from{box-shadow:0 0 12px rgba(0,255,136,.2)}to{box-shadow:0 0 28px rgba(0,255,136,.45)}}
+.spray-status .sv-dot{
+  width:10px;height:10px;border-radius:50%;
+  background:var(--tx3);flex-shrink:0;transition:all .25s;
+}
+.spray-status.on .sv-dot{
+  background:var(--ac2);box-shadow:0 0 8px var(--ac2);
+  animation:blink .4s ease-in-out infinite;
+}
+
+/* Camera border glow when spraying */
+.cam-wrap{transition:box-shadow .3s;}
+.cam-wrap.spraying{box-shadow:inset 0 0 0 3px rgba(0,255,136,.7),inset 0 0 30px rgba(0,255,136,.12);}
+
+/* Spray button — bigger & clearer state */
+.spray-btn{width:100%;padding:17px;border:2px solid var(--ac2);border-radius:5px;background:rgba(0,255,136,.04);color:var(--ac2);font-family:var(--fh);font-size:20px;font-weight:700;letter-spacing:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .2s;position:relative;overflow:hidden;}
+.spray-btn::after{content:'';position:absolute;inset:0;background:transparent;transition:background .2s;}
+.spray-btn.active{background:rgba(0,255,136,.18);border-color:var(--ac2);animation:sglow .5s ease-in-out infinite alternate;}
+.spray-btn.active::after{background:repeating-linear-gradient(90deg,transparent 0,transparent 8px,rgba(0,255,136,.04) 8px,rgba(0,255,136,.04) 16px);}
 </style>
 </head>
 <body>
@@ -148,7 +182,14 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
       <button class="cam-btn" onclick="startCam()">KAMERA STARTEN</button>
       <p class="cam-note">Pure JS Engine - kein Download noetig</p>
     </div>
-    <button class="flip-btn" id="flipBtn" onclick="flipCam()">KAMERA WECHSELN</button>
+    <button class="flip-btn" id="flipBtn" onclick="flipCam()">🔄 KAMERA WECHSELN</button>
+
+    <!-- SPRAY STATUS — immer sichtbar, Mitte oben im Kamerabild -->
+    <div class="spray-status" id="sprayStatus">
+      <div class="sv-dot"></div>
+      <span id="sprayStatusTxt">VENTIL&nbsp;AUS</span>
+    </div>
+
     <div class="hud-tl">FPS <span id="hFps">--</span><br>RES <span id="hRes">--</span><br>CAM <span id="hCam">--</span></div>
     <div class="hud-tr">CLAHE <span id="hC" style="color:var(--ac2)">ON</span><br>CANNY <span style="color:var(--ac2)">ON</span><br>ROI <span id="hR" style="color:var(--ac2)">ON</span></div>
     <div class="hud-bl"><div class="det-pill lost" id="detPill"><div class="dp"></div><span id="detTxt">WARTE...</span></div></div>
@@ -158,6 +199,22 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
       <span class="off-lbl">LAT-VERSATZ</span>
       <div class="off-track"><div class="off-ctr"></div><div class="off-dot" id="offDot" style="left:50%"></div></div>
       <span class="off-val" id="offVal">-- mm</span>
+    </div>
+
+    <!-- GPS Schnellinfo am unteren Kamerarand -->
+    <div id="gpsBar" style="position:absolute;bottom:44px;left:0;right:0;display:flex;justify-content:space-around;padding:3px 10px;background:rgba(8,12,14,.7);backdrop-filter:blur(4px);border-top:1px solid rgba(0,200,255,.1);pointer-events:none;">
+      <span style="font-family:var(--fm);font-size:9px;color:var(--tx3);">
+        🛰 <span id="gbSpd" style="color:var(--ac);">-- km/h</span>
+      </span>
+      <span style="font-family:var(--fm);font-size:9px;color:var(--tx3);">
+        📍 <span id="gbDist" style="color:var(--ac2);">-- m</span>
+      </span>
+      <span style="font-family:var(--fm);font-size:9px;color:var(--tx3);">
+        🎨 <span id="gbMark" style="color:var(--ac2);">-- m</span>
+      </span>
+      <span style="font-family:var(--fm);font-size:9px;color:var(--tx3);">
+        ±<span id="gbAcc" style="color:var(--warn);">-- m</span>
+      </span>
     </div>
   </div>
   <div class="tabs">
@@ -191,18 +248,47 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
     </div>
     <div class="panel" id="panel-data">
       <div class="dgrid">
-        <div class="dcard"><div class="dlbl">FRAMES TOTAL</div><div class="dval ac" id="dFr">0</div></div>
-        <div class="dcard"><div class="dlbl">ERKENNUNGSRATE</div><div class="dval ac2" id="dRate">--%</div></div>
-        <div class="dcard"><div class="dlbl">Ø KONFIDENZ</div><div class="dval" id="dConf">--%</div></div>
-        <div class="dcard"><div class="dlbl">VERARBZEIT</div><div class="dval" id="dProc">-- ms</div></div>
-        <div class="dcard"><div class="dlbl">LINIEN ERKANNT</div><div class="dval ac" id="dLn">0</div></div>
-        <div class="dcard"><div class="dlbl">FPS</div><div class="dval ac2" id="dFps">--</div></div>
+        <!-- GPS Hauptwerte -->
+        <div class="dcard" style="border-color:rgba(0,200,255,.2)">
+          <div class="dlbl">GESCHWINDIGKEIT</div>
+          <div class="dval ac" id="dSpd">--<span class="dunit"> km/h</span></div>
+        </div>
+        <div class="dcard" style="border-color:rgba(0,200,255,.2)">
+          <div class="dlbl">MAX. GESCHW.</div>
+          <div class="dval ac" id="dSpdMax">--<span class="dunit"> km/h</span></div>
+        </div>
+        <div class="dcard" style="border-color:rgba(0,255,136,.15)">
+          <div class="dlbl">STRECKE GESAMT</div>
+          <div class="dval ac2" id="dDist">--<span class="dunit"> m</span></div>
+        </div>
+        <div class="dcard" style="border-color:rgba(0,255,136,.15)">
+          <div class="dlbl">STRECKE MARKIERT</div>
+          <div class="dval ac2" id="dDistMark">--<span class="dunit"> m</span></div>
+        </div>
+        <!-- GPS Qualität -->
+        <div class="qcard" style="border-color:rgba(0,200,255,.12)">
+          <div class="qtitle">GPS — LIVE POSITION</div>
+          <div class="qrow"><span class="ql">BREITENGRAD</span><span class="qv" id="gLat">--</span><span class="qb ok" id="gFix">KEIN FIX</span></div>
+          <div class="qrow"><span class="ql">LAENGENGRAD</span><span class="qv" id="gLon">--</span></div>
+          <div class="qrow"><span class="ql">GENAUIGKEIT</span><span class="qv" id="gAcc">-- m</span><span class="qb ok" id="gAccB">--</span></div>
+          <div class="qrow"><span class="ql">HOEHE</span><span class="qv" id="gAlt">-- m</span></div>
+          <div class="qrow"><span class="ql">RICHTUNG</span><span class="qv" id="gHdg">--°</span></div>
+          <div class="qrow"><span class="ql">GPS-PUNKTE</span><span class="qv" id="gPts">0</span></div>
+        </div>
+        <!-- CV Statistik -->
         <div class="qcard">
-          <div class="qtitle">AKTUELLE MESSUNG</div>
-          <div class="qrow"><span class="ql">LAT-VERSATZ</span><span class="qv" id="qOff">-- mm</span><span class="qb ok" id="qOffB">--</span></div>
-          <div class="qrow"><span class="ql">LINIEN IM BILD</span><span class="qv" id="qCnt">--</span><span class="qb ok">LIVE</span></div>
-          <div class="qrow"><span class="ql">STAERKSTE LINIE</span><span class="qv" id="qStr">-- px</span></div>
-          <div class="qrow"><span class="ql">LETZTER TREFFER</span><span class="qv" id="qLast">--</span></div>
+          <div class="qtitle">BILDVERARBEITUNG</div>
+          <div class="qrow"><span class="ql">ERKENNUNGSRATE</span><span class="qv" id="dRate">--%</span><span class="qb ok">CV</span></div>
+          <div class="qrow"><span class="ql">Ø KONFIDENZ</span><span class="qv" id="dConf">--%</span></div>
+          <div class="qrow"><span class="ql">FRAMES TOTAL</span><span class="qv" id="dFr">0</span></div>
+          <div class="qrow"><span class="ql">VERARBZEIT</span><span class="qv" id="dProc">-- ms</span></div>
+          <div class="qrow"><span class="ql">FPS</span><span class="qv" id="dFps">--</span></div>
+        </div>
+        <!-- Reset Button -->
+        <div style="grid-column:1/-1">
+          <button onclick="resetGps()" style="width:100%;padding:10px;border:1px solid var(--b2);border-radius:4px;background:var(--bg2);color:var(--tx2);font-family:var(--fm);font-size:10px;letter-spacing:2px;cursor:pointer;">
+            ↺ STRECKE ZURÜCKSETZEN
+          </button>
         </div>
       </div>
     </div>
@@ -216,6 +302,161 @@ const p={cannyLow:50,cannyHigh:120,hough:40,roiH:0.60,useClahe:true,useRoi:true}
 let camStream=null,facing='environment',animId=null,sprayActive=false,emergency=false;
 let frameCount=0,hitCount=0,totalConf=0,totalLines=0,lineHistory=[],fpsCount=0,fps=0,fpsTimer=0,lastHit='--';
 const SMOOTH=6;
+
+// ════════════════════════════════════════════
+//  GPS ENGINE
+// ════════════════════════════════════════════
+let gpsWatchId = null;
+let lastGpsPos = null;         // {lat, lon, ts}
+let totalDistM = 0;            // Gesamtstrecke in Metern
+let markedDistM = 0;           // Markierte Strecke in Metern
+let maxSpeedKmh = 0;
+let gpsPoints = 0;
+let currentSpeedKmh = 0;
+let currentHeading = null;
+let currentAlt = null;
+let currentAcc = null;
+let gpsActive = false;
+
+// Haversine-Formel: Distanz zwischen zwei GPS-Punkten in Metern
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000; // Erdradius in Metern
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)*Math.sin(dLat/2) +
+            Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*
+            Math.sin(dLon/2)*Math.sin(dLon/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Kompasse-Richtung aus Grad
+function headingLabel(deg) {
+  const dirs = ['N','NO','O','SO','S','SW','W','NW'];
+  return dirs[Math.round(deg/45)%8];
+}
+
+function onGpsSuccess(pos) {
+  const {latitude:lat, longitude:lon, accuracy, altitude, heading, speed} = pos.coords;
+  const ts = pos.timestamp;
+  gpsPoints++;
+  currentAcc = accuracy;
+
+  // Geschwindigkeit: bevorzuge GPS-eigene speed wenn verfügbar, sonst Haversine
+  if (speed !== null && speed >= 0) {
+    currentSpeedKmh = speed * 3.6;
+  } else if (lastGpsPos) {
+    const dist = haversine(lastGpsPos.lat, lastGpsPos.lon, lat, lon);
+    const dt = (ts - lastGpsPos.ts) / 1000; // Sekunden
+    if (dt > 0 && dist < 500) { // Plausibilitätscheck
+      currentSpeedKmh = (dist / dt) * 3.6;
+    }
+  }
+
+  // Distanz berechnen
+  if (lastGpsPos && accuracy < 30) { // Nur bei guter Genauigkeit
+    const dist = haversine(lastGpsPos.lat, lastGpsPos.lon, lat, lon);
+    // Nur zählen wenn Bewegung plausibel (kein GPS-Drift)
+    if (dist > 1 && dist < 200 && currentSpeedKmh > 0.5) {
+      totalDistM += dist;
+      if (sprayActive) markedDistM += dist;
+    }
+  }
+
+  if (currentSpeedKmh > maxSpeedKmh) maxSpeedKmh = currentSpeedKmh;
+  if (heading !== null) currentHeading = heading;
+  if (altitude !== null) currentAlt = altitude;
+
+  lastGpsPos = {lat, lon, ts};
+  gpsActive = true;
+
+  updateGpsUI(lat, lon, accuracy);
+}
+
+function onGpsError(err) {
+  const msgs = {1:'Zugriff verweigert',2:'Position nicht verfuegbar',3:'Timeout'};
+  log('GPS: ' + (msgs[err.code]||err.message), 'w');
+  document.getElementById('gFix').textContent = 'FEHLER';
+  document.getElementById('gFix').className = 'qb w';
+}
+
+function startGps() {
+  if (!('geolocation' in navigator)) {
+    log('GPS: Nicht unterstuetzt', 'w'); return;
+  }
+  log('GPS wird gestartet...', 'i');
+  gpsWatchId = navigator.geolocation.watchPosition(
+    onGpsSuccess,
+    onGpsError,
+    {
+      enableHighAccuracy: true,  // Bestes GPS verwenden
+      maximumAge: 1000,          // Max. 1s alter Cache
+      timeout: 10000
+    }
+  );
+}
+
+function resetGps() {
+  totalDistM = 0; markedDistM = 0; maxSpeedKmh = 0; gpsPoints = 0;
+  lastGpsPos = null;
+  log('GPS Strecke zurueckgesetzt', 'i');
+  updateGpsDisplay();
+}
+
+function updateGpsUI(lat, lon, accuracy) {
+  // Fix-Badge
+  const fixEl = document.getElementById('gFix');
+  fixEl.textContent = accuracy < 10 ? 'EXAKT' : accuracy < 25 ? 'GUT' : accuracy < 50 ? 'OK' : 'SCHWACH';
+  fixEl.className = 'qb ' + (accuracy < 25 ? 'ok' : 'w');
+
+  // Koordinaten
+  document.getElementById('gLat').textContent = lat.toFixed(6) + '°';
+  document.getElementById('gLon').textContent = lon.toFixed(6) + '°';
+  document.getElementById('gAcc').textContent = Math.round(accuracy) + ' m';
+  document.getElementById('gAccB').textContent = accuracy < 25 ? 'OK' : 'WARN';
+  document.getElementById('gAccB').className = 'qb ' + (accuracy < 25 ? 'ok' : 'w');
+  document.getElementById('gAlt').textContent = currentAlt !== null ? Math.round(currentAlt) + ' m' : '-- m';
+  document.getElementById('gHdg').textContent = currentHeading !== null
+    ? Math.round(currentHeading) + '° ' + headingLabel(currentHeading) : '--°';
+  document.getElementById('gPts').textContent = gpsPoints;
+
+  updateGpsDisplay();
+}
+
+function updateGpsDisplay() {
+  // Geschwindigkeit
+  const spdEl = document.getElementById('dSpd');
+  spdEl.innerHTML = currentSpeedKmh.toFixed(1) + '<span class="dunit"> km/h</span>';
+  document.getElementById('dSpdMax').innerHTML = maxSpeedKmh.toFixed(1) + '<span class="dunit"> km/h</span>';
+
+  // Strecke — automatisch m / km wechseln
+  const distEl = document.getElementById('dDist');
+  const markEl = document.getElementById('dDistMark');
+  if (totalDistM >= 1000) {
+    distEl.innerHTML = (totalDistM/1000).toFixed(3) + '<span class="dunit"> km</span>';
+  } else {
+    distEl.innerHTML = Math.round(totalDistM) + '<span class="dunit"> m</span>';
+  }
+  if (markedDistM >= 1000) {
+    markEl.innerHTML = (markedDistM/1000).toFixed(3) + '<span class="dunit"> km</span>';
+  } else {
+    markEl.innerHTML = Math.round(markedDistM) + '<span class="dunit"> m</span>';
+  }
+
+  // GPS-Schnellbar im Kamerabild
+  document.getElementById('gbSpd').textContent = currentSpeedKmh.toFixed(1) + ' km/h';
+  document.getElementById('gbDist').textContent = totalDistM >= 1000
+    ? (totalDistM/1000).toFixed(2) + ' km' : Math.round(totalDistM) + ' m';
+  document.getElementById('gbMark').textContent = markedDistM >= 1000
+    ? (markedDistM/1000).toFixed(2) + ' km' : Math.round(markedDistM) + ' m';
+  document.getElementById('gbAcc').textContent = currentAcc !== null ? Math.round(currentAcc) + ' m' : '-- m';
+  // Farbe Genauigkeit
+  if (currentAcc !== null) {
+    document.getElementById('gbAcc').style.color = currentAcc < 10 ? 'var(--ok)' : currentAcc < 25 ? 'var(--ac2)' : 'var(--warn)';
+  }
+}
+
+// GPS sofort starten
+startGps();
 
 setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString('de-AT',{hour12:false,hour:'2-digit',minute:'2-digit'});},1000);
 
@@ -388,14 +629,35 @@ function startLoop(){
 let simT=0;
 function startSimLoop(){log('Simulation aktiv','w');setInterval(()=>{simT++;const c=Math.round(65+Math.random()*25);document.getElementById('confFill').style.width=c+'%';document.getElementById('confPct').textContent=c+'%';const off=Math.round((Math.random()-.5)*80),op=Math.max(5,Math.min(95,50+(off/150)*50));document.getElementById('offDot').style.left=op+'%';document.getElementById('offVal').textContent=(off>=0?'+':'')+off+' mm';document.getElementById('detPill').className='det-pill found';document.getElementById('detTxt').textContent='SIMULATION';document.getElementById('hFps').textContent=Math.floor(24+Math.random()*6);document.getElementById('hT').textContent=Math.floor(8+Math.random()*6);document.getElementById('hF').textContent=simT;},500);}
 
-function toggleSpray(){if(emergency)return;sprayActive=!sprayActive;document.getElementById('sprayIco').textContent=sprayActive?'⏹':'▶';document.getElementById('sprayLbl').textContent=sprayActive?'STOPP SPRUEHEN':'SPRUEHEN';document.getElementById('sprayBtn').classList.toggle('active',sprayActive);log(sprayActive?'SPRUEHEN aktiviert':'SPRUEHEN gestoppt',sprayActive?'ok':'i');}
+function toggleSpray(){
+  if(emergency)return;
+  sprayActive=!sprayActive;
+  // Button
+  document.getElementById('sprayIco').textContent=sprayActive?'⏹':'▶';
+  document.getElementById('sprayLbl').textContent=sprayActive?'⬛ VENTIL AKTIV — TIPPEN ZUM STOPPEN':'▶ SPRUEHEN STARTEN';
+  document.getElementById('sprayBtn').classList.toggle('active',sprayActive);
+  // Camera area overlay
+  const ss=document.getElementById('sprayStatus');
+  ss.classList.toggle('on',sprayActive);
+  document.getElementById('sprayStatusTxt').textContent=sprayActive?'VENTIL\u00a0EIN':'VENTIL\u00a0AUS';
+  // Camera border glow
+  document.getElementById('camWrap').classList.toggle('spraying',sprayActive);
+  log(sprayActive?'Spruhventil GEOEFFNET — Markierung aktiv':'Spruhventil GESCHLOSSEN','ok');
+}
 function setMode(el){document.querySelectorAll('.mbtn').forEach(b=>b.classList.remove('active'));el.classList.add('active');log('Modus: '+el.textContent.trim(),'i');}
-function triggerEmg(){emergency=!emergency;document.getElementById('emg').classList.toggle('show',emergency);document.getElementById('notausBtn').textContent=emergency?'NOT-AUS ZURUECKSETZEN':'NOT-AUS';if(emergency&&sprayActive)toggleSpray();log(emergency?'NOT-AUS AKTIVIERT!':'NOT-AUS zurueckgesetzt',emergency?'w':'ok');}
+function triggerEmg(){
+  emergency=!emergency;
+  document.getElementById('emg').classList.toggle('show',emergency);
+  document.getElementById('notausBtn').textContent=emergency?'NOT-AUS ZURUECKSETZEN':'NOT-AUS';
+  if(emergency&&sprayActive)toggleSpray();
+  log(emergency?'NOT-AUS AKTIVIERT!':'NOT-AUS zurueckgesetzt',emergency?'w':'ok');
+}
 
 function log(msg,type){const t=new Date().toLocaleTimeString('de-AT',{hour12:false}),l=document.getElementById('logList'),e=document.createElement('div');e.className='le';e.innerHTML='<span class="lt">'+t+'</span><span class="lm '+(type||'i')+'">'+msg+'</span>';l.appendChild(e);l.scrollTop=l.scrollHeight;}
 
-log('STRASSE CV v5.0 — Pure JS Engine','ok');
-log('Keine externen Abhaengigkeiten — sofort bereit','ok');
+log('STRASSE CV v6.0 — GPS + Pure JS CV Engine','ok');
+log('Haversine-Distanzberechnung aktiv','ok');
+log('GPS wird initialisiert — bitte Zugriff erlauben','i');
 log('Pipeline: Graustufen + CLAHE + Canny + Hough','i');
 </script>
 </body>
