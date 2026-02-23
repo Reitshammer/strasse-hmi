@@ -6,208 +6,110 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>STRASSE — Live CV</title>
-
-<!-- OpenCV.js (offizielle WebAssembly Version) -->
-<script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady()" onerror="onOpenCvError()"></script>
-
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;500;600&display=swap');
-
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
-
 :root{
-  --bg:#07090b;
-  --bg2:#0c1014;
-  --bg3:#101620;
-  --panel:#0e1820;
-  --b1:#192d3d;
-  --b2:#1e3a50;
-  --ac:#00c8ff;
-  --ac2:#00ff88;
-  --warn:#ffaa00;
-  --danger:#ff3c3c;
-  --tx:#b0ccd8;
-  --tx2:#4a7090;
-  --tx3:#253d50;
-  --wh:#dff0f8;
-  --ok:#00d970;
-  --fh:'Rajdhani',sans-serif;
-  --fm:'Share Tech Mono',monospace;
-  --fb:'Barlow Condensed',sans-serif;
-  --sat:env(safe-area-inset-top,0px);
-  --sab:env(safe-area-inset-bottom,0px);
+  --bg:#07090b;--bg2:#0c1014;--b1:#192d3d;--b2:#1e3a50;
+  --ac:#00c8ff;--ac2:#00ff88;--warn:#ffaa00;--danger:#ff3c3c;
+  --tx:#b0ccd8;--tx2:#4a7090;--tx3:#253d50;--wh:#dff0f8;--ok:#00d970;
+  --fh:'Rajdhani',sans-serif;--fm:'Share Tech Mono',monospace;--fb:'Barlow Condensed',sans-serif;
+  --sat:env(safe-area-inset-top,0px);--sab:env(safe-area-inset-bottom,0px);
 }
-
 html,body{width:100%;height:100%;background:var(--bg);color:var(--tx);font-family:var(--fb);overflow:hidden;touch-action:manipulation;}
-
 .app{display:flex;flex-direction:column;width:100vw;height:100vh;height:100dvh;padding-top:var(--sat);padding-bottom:var(--sab);}
-
-/* ── TOPBAR ── */
 .topbar{display:flex;align-items:center;padding:0 12px;background:var(--bg2);border-bottom:1px solid var(--b1);gap:10px;flex-shrink:0;height:46px;}
 .logo{font-family:var(--fh);font-size:18px;font-weight:700;letter-spacing:3px;color:var(--ac);text-shadow:0 0 18px rgba(0,200,255,.4);}
 .logo small{font-size:8px;color:var(--tx2);letter-spacing:1.5px;font-weight:400;margin-left:6px;}
 .sep{flex:1;}
-.cv-badge{display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:3px;font-family:var(--fm);font-size:8px;letter-spacing:1px;}
-.cv-badge.loading{background:rgba(255,170,0,.08);border:1px solid rgba(255,170,0,.25);color:var(--warn);}
-.cv-badge.ready{background:rgba(0,217,112,.08);border:1px solid rgba(0,217,112,.25);color:var(--ok);}
-.cv-badge.error{background:rgba(255,60,60,.08);border:1px solid rgba(255,60,60,.25);color:var(--danger);}
-.cv-badge .dot{width:6px;height:6px;border-radius:50%;animation:blink 1.5s ease-in-out infinite;}
-.cv-badge.loading .dot{background:var(--warn);box-shadow:0 0 6px var(--warn);}
-.cv-badge.ready .dot{background:var(--ok);box-shadow:0 0 6px var(--ok);}
+.badge{display:flex;align-items:center;gap:5px;padding:3px 8px;border-radius:3px;font-family:var(--fm);font-size:8px;letter-spacing:1px;background:rgba(0,217,112,.08);border:1px solid rgba(0,217,112,.3);color:var(--ok);}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 6px var(--ok);animation:blink 2s ease-in-out infinite;}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
 .clock{font-family:var(--fm);font-size:11px;color:var(--tx2);letter-spacing:1px;}
-
-/* ── CAMERA WRAP ── */
-.cam-wrap{position:relative;flex:1;background:#030506;overflow:hidden;min-height:0;}
-
-video#vid{
-  position:absolute;inset:0;
-  width:100%;height:100%;
-  object-fit:cover;
-  display:none;
-}
-
-/* Hidden processing canvas (OpenCV reads from here) */
-canvas#procCanvas{display:none;}
-
-/* Display canvas — what user sees */
-canvas#dispCanvas{
-  position:absolute;inset:0;
-  width:100%;height:100%;
-  display:block;
-}
-
-/* Simulated road background (shown before camera) */
-.road-bg{
-  position:absolute;inset:0;
-  background:repeating-linear-gradient(180deg,#161616 0,#121212 20px,#101010 40px);
-  animation:rs 1.2s linear infinite;
-}
+.cam-wrap{position:relative;background:#030506;overflow:hidden;min-height:0;flex-shrink:0;}
+video#vid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:none;}
+canvas#disp{position:absolute;inset:0;width:100%;height:100%;display:block;}
+canvas#proc{display:none;}
+.road-bg{position:absolute;inset:0;background:repeating-linear-gradient(180deg,#171717 0,#111 20px,#0f0f0f 40px);animation:rs 1.2s linear infinite;}
 @keyframes rs{from{background-position:0 0}to{background-position:0 40px}}
-.road-line{position:absolute;left:50%;top:0;bottom:0;transform:translateX(-50%);width:12px;
-  background:repeating-linear-gradient(180deg,rgba(200,180,80,.14) 0,rgba(200,180,80,.06) 28px,transparent 28px,transparent 56px);
-  animation:rs 1.2s linear infinite;}
-
-/* ── CAM REQUEST ── */
-.cam-req{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
-  background:rgba(7,9,11,.88);backdrop-filter:blur(6px);z-index:20;}
-.cam-req p{font-family:var(--fm);font-size:10px;color:var(--tx2);letter-spacing:1.5px;text-align:center;line-height:1.8;}
-.cam-req-btn{padding:14px 28px;border:1px solid var(--ac);border-radius:5px;
-  background:rgba(0,200,255,.06);color:var(--ac);
-  font-family:var(--fh);font-size:16px;font-weight:700;letter-spacing:3px;cursor:pointer;
-  box-shadow:0 0 20px rgba(0,200,255,.1);}
-.cam-req-btn:active{opacity:.7;}
-.cam-req-note{font-size:8px;color:var(--tx3);letter-spacing:1px;}
-
-/* ── HUD OVERLAYS ── */
-.hud-tl{position:absolute;top:10px;left:10px;font-family:var(--fm);font-size:8px;color:rgba(0,200,255,.65);line-height:1.9;pointer-events:none;}
-.hud-tr{position:absolute;top:10px;right:10px;font-family:var(--fm);font-size:8px;color:rgba(0,200,255,.65);line-height:1.9;text-align:right;pointer-events:none;}
-.hud-bc{position:absolute;bottom:52px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:5px;pointer-events:none;}
+.road-line{position:absolute;left:50%;top:0;bottom:0;transform:translateX(-50%);width:12px;background:repeating-linear-gradient(180deg,rgba(200,175,70,.13) 0,rgba(200,175,70,.05) 28px,transparent 28px,transparent 56px);animation:rs 1.2s linear infinite;}
+.cam-req{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(7,9,11,.9);backdrop-filter:blur(8px);z-index:20;}
+.cam-req p{font-family:var(--fm);font-size:10px;color:var(--tx2);letter-spacing:1.5px;text-align:center;line-height:1.9;}
+.cam-btn{padding:14px 28px;border:1px solid var(--ac);border-radius:5px;background:rgba(0,200,255,.06);color:var(--ac);font-family:var(--fh);font-size:16px;font-weight:700;letter-spacing:3px;cursor:pointer;}
+.cam-btn:active{opacity:.7;}
+.cam-note{font-size:8px!important;color:var(--tx3)!important;}
+.hud-tl{position:absolute;top:10px;left:10px;font-family:var(--fm);font-size:9px;color:rgba(0,200,255,.65);line-height:2;pointer-events:none;}
+.hud-tr{position:absolute;top:10px;right:10px;font-family:var(--fm);font-size:9px;color:rgba(0,200,255,.65);line-height:2;text-align:right;pointer-events:none;}
 .hud-bl{position:absolute;bottom:52px;left:10px;pointer-events:none;}
-.hud-br{position:absolute;bottom:52px;right:10px;font-family:var(--fm);font-size:8px;color:rgba(0,200,255,.55);text-align:right;line-height:1.9;pointer-events:none;}
-
-.detect-pill{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:3px;
-  background:rgba(0,0,0,.6);backdrop-filter:blur(4px);}
-.detect-pill.found{border:1px solid rgba(0,255,136,.35);}
-.detect-pill.lost{border:1px solid rgba(255,170,0,.35);}
-.detect-pill .dp{width:6px;height:6px;border-radius:50%;}
-.detect-pill.found .dp{background:var(--ac2);box-shadow:0 0 6px var(--ac2);animation:blink 1.2s ease-in-out infinite;}
-.detect-pill.lost .dp{background:var(--warn);}
-.detect-pill span{font-family:var(--fm);font-size:9px;letter-spacing:1px;}
-.detect-pill.found span{color:var(--ac2);}
-.detect-pill.lost span{color:var(--warn);}
-
-.conf-pill{display:flex;align-items:center;gap:6px;padding:4px 10px;
-  background:rgba(0,0,0,.55);border:1px solid rgba(0,200,255,.2);border-radius:3px;backdrop-filter:blur(4px);}
+.hud-bc{position:absolute;bottom:52px;left:50%;transform:translateX(-50%);pointer-events:none;}
+.hud-br{position:absolute;bottom:52px;right:10px;font-family:var(--fm);font-size:9px;color:rgba(0,200,255,.5);text-align:right;line-height:2;pointer-events:none;}
+.det-pill{display:flex;align-items:center;gap:5px;padding:4px 10px;border-radius:3px;backdrop-filter:blur(4px);}
+.det-pill.found{background:rgba(0,0,0,.6);border:1px solid rgba(0,255,136,.35);}
+.det-pill.lost{background:rgba(0,0,0,.6);border:1px solid rgba(255,170,0,.3);}
+.det-pill .dp{width:6px;height:6px;border-radius:50%;}
+.det-pill.found .dp{background:var(--ac2);box-shadow:0 0 6px var(--ac2);animation:blink 1.2s ease-in-out infinite;}
+.det-pill.lost .dp{background:var(--warn);}
+.det-pill span{font-family:var(--fm);font-size:9px;letter-spacing:1px;}
+.det-pill.found span{color:var(--ac2);}
+.det-pill.lost span{color:var(--warn);}
+.conf-pill{display:flex;align-items:center;gap:6px;padding:4px 10px;background:rgba(0,0,0,.55);border:1px solid rgba(0,200,255,.2);border-radius:3px;backdrop-filter:blur(4px);}
 .conf-pill .cl{font-family:var(--fm);font-size:8px;color:var(--tx3);letter-spacing:1px;}
-.conf-track{width:80px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;}
-.conf-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,#00aa55,var(--ac2));transition:width .3s;}
-.conf-pct{font-family:var(--fm);font-size:9px;color:var(--ac2);min-width:28px;}
-
-/* ── OFFSET BAR ── */
-.off-bar{position:absolute;bottom:0;left:0;right:0;
-  background:rgba(8,12,14,.85);border-top:1px solid var(--b1);
-  padding:7px 14px;display:flex;align-items:center;gap:10px;backdrop-filter:blur(6px);}
+.ctrack{width:80px;height:3px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;}
+.cfill{height:100%;border-radius:2px;background:linear-gradient(90deg,#00aa55,var(--ac2));transition:width .3s;}
+.cpct{font-family:var(--fm);font-size:9px;color:var(--ac2);min-width:28px;}
+.flip-btn{position:absolute;top:10px;left:50%;transform:translateX(-50%);display:none;background:rgba(0,0,0,.6);border:1px solid rgba(0,200,255,.25);border-radius:20px;padding:5px 14px;font-family:var(--fm);font-size:9px;color:var(--ac);letter-spacing:1px;cursor:pointer;backdrop-filter:blur(4px);}
+.flip-btn:active{opacity:.6;}
+.off-bar{position:absolute;bottom:0;left:0;right:0;background:rgba(8,12,14,.85);border-top:1px solid var(--b1);padding:7px 14px;display:flex;align-items:center;gap:10px;backdrop-filter:blur(6px);}
 .off-lbl{font-family:var(--fm);font-size:8px;color:var(--tx3);letter-spacing:1px;min-width:62px;flex-shrink:0;}
 .off-track{flex:1;height:6px;background:var(--b1);border-radius:3px;position:relative;}
 .off-ctr{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:2px;height:10px;background:var(--tx3);border-radius:1px;}
-.off-dot{position:absolute;top:50%;width:10px;height:10px;border-radius:50%;background:var(--ac);box-shadow:0 0 6px rgba(0,200,255,.6);transform:translate(-50%,-50%);transition:left .25s ease,background .2s;}
+.off-dot{position:absolute;top:50%;width:10px;height:10px;border-radius:50%;background:var(--ac);box-shadow:0 0 6px rgba(0,200,255,.6);transform:translate(-50%,-50%);transition:left .2s ease;}
 .off-dot.w{background:var(--warn);box-shadow:0 0 6px rgba(255,170,0,.6);}
 .off-val{font-family:var(--fm);font-size:12px;color:var(--wh);min-width:52px;text-align:right;flex-shrink:0;}
 .off-val.w{color:var(--warn);}
-
-/* cam flip */
-.flip-btn{position:absolute;top:10px;left:50%;transform:translateX(-50%);
-  display:none;
-  background:rgba(0,0,0,.55);border:1px solid rgba(0,200,255,.25);border-radius:20px;
-  padding:5px 14px;font-family:var(--fm);font-size:9px;color:var(--ac);letter-spacing:1px;cursor:pointer;backdrop-filter:blur(4px);}
-
-/* ── TAB BAR ── */
 .tabs{display:flex;background:var(--bg2);border-top:1px solid var(--b1);flex-shrink:0;}
-.tab{flex:1;padding:8px 4px 6px;text-align:center;font-family:var(--fm);font-size:7px;color:var(--tx3);
-  letter-spacing:1px;cursor:pointer;border-bottom:2px solid transparent;text-transform:uppercase;transition:all .15s;}
+.tab{flex:1;padding:8px 4px 6px;text-align:center;font-family:var(--fm);font-size:7px;color:var(--tx3);letter-spacing:1px;cursor:pointer;border-bottom:2px solid transparent;text-transform:uppercase;transition:all .15s;}
 .tab .ti{font-size:15px;display:block;margin-bottom:2px;}
 .tab.active{color:var(--ac);border-bottom-color:var(--ac);}
 .tab:active{opacity:.5;}
-
-/* ── PANELS ── */
-.panels{flex-shrink:0;overflow:hidden;background:var(--bg);}
-.panel{display:none;flex-direction:column;padding:10px 12px;gap:9px;overflow-y:auto;max-height:100%;}
+.panels{flex:1;overflow:hidden;background:var(--bg);}
+.panel{display:none;flex-direction:column;padding:10px 12px;gap:9px;overflow-y:auto;height:100%;}
 .panel.active{display:flex;}
-
-/* STEUERUNG */
-.spray-btn{width:100%;padding:17px;border:2px solid var(--ac2);border-radius:5px;
-  background:rgba(0,255,136,.04);color:var(--ac2);
-  font-family:var(--fh);font-size:20px;font-weight:700;letter-spacing:4px;cursor:pointer;
-  display:flex;align-items:center;justify-content:center;gap:10px;transition:all .15s;}
+.spray-btn{width:100%;padding:17px;border:2px solid var(--ac2);border-radius:5px;background:rgba(0,255,136,.04);color:var(--ac2);font-family:var(--fh);font-size:20px;font-weight:700;letter-spacing:4px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:all .15s;}
 .spray-btn.active{background:rgba(0,255,136,.14);animation:sglow .6s ease-in-out infinite alternate;}
 @keyframes sglow{from{box-shadow:0 0 18px rgba(0,255,136,.15)}to{box-shadow:0 0 38px rgba(0,255,136,.35)}}
 .spray-btn:active{transform:scale(.97);}
-
-.mode-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
-.mbtn{padding:13px 8px;border:1px solid var(--b2);border-radius:4px;background:var(--bg2);color:var(--tx2);
-  font-family:var(--fh);font-size:13px;font-weight:600;letter-spacing:1px;cursor:pointer;
-  text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;transition:all .15s;}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.mbtn{padding:13px 8px;border:1px solid var(--b2);border-radius:4px;background:var(--bg2);color:var(--tx2);font-family:var(--fh);font-size:13px;font-weight:600;letter-spacing:1px;cursor:pointer;text-align:center;display:flex;flex-direction:column;align-items:center;gap:3px;transition:all .15s;}
 .mbtn .ic{font-size:18px;}
 .mbtn:active{transform:scale(.96);}
-.mbtn.active{background:rgba(0,200,255,.07);border-color:var(--ac);color:var(--ac);box-shadow:0 0 10px rgba(0,200,255,.1);}
-
-.notaus{width:100%;padding:14px;border:2px solid var(--danger);border-radius:5px;
-  background:rgba(255,60,60,.05);color:var(--danger);
-  font-family:var(--fh);font-size:18px;font-weight:700;letter-spacing:3px;cursor:pointer;text-align:center;transition:all .15s;}
+.mbtn.active{background:rgba(0,200,255,.07);border-color:var(--ac);color:var(--ac);}
+.notaus{width:100%;padding:14px;border:2px solid var(--danger);border-radius:5px;background:rgba(255,60,60,.05);color:var(--danger);font-family:var(--fh);font-size:18px;font-weight:700;letter-spacing:3px;cursor:pointer;text-align:center;}
 .notaus:active{background:rgba(255,60,60,.18);}
-
-/* PARAMETER */
-.plbl{font-family:var(--fm);font-size:8px;color:var(--tx3);letter-spacing:2px;margin-bottom:8px;}
-.srow{margin-bottom:13px;}
+.plbl{font-family:var(--fm);font-size:8px;color:var(--tx3);letter-spacing:2px;margin-bottom:6px;}
+.srow{margin-bottom:12px;}
 .shdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:5px;}
 .sname{font-size:11px;color:var(--tx2);font-family:var(--fm);}
 .sval{font-size:14px;font-family:var(--fm);color:var(--wh);font-weight:600;}
 input[type=range]{width:100%;-webkit-appearance:none;appearance:none;height:5px;border-radius:3px;background:var(--b1);outline:none;cursor:pointer;}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:var(--ac);box-shadow:0 0 10px rgba(0,200,255,.5);cursor:pointer;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:50%;background:var(--ac);box-shadow:0 0 10px rgba(0,200,255,.5);cursor:pointer;}
 input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 10px rgba(0,255,136,.5);}
-
-/* Toggle switch */
-.toggle-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
-.toggle-lbl{font-family:var(--fm);font-size:10px;color:var(--tx);}
-.toggle{position:relative;width:40px;height:22px;cursor:pointer;}
-.toggle input{opacity:0;width:0;height:0;}
-.toggle-track{position:absolute;inset:0;border-radius:11px;background:var(--b1);border:1px solid var(--b2);transition:background .2s;}
-.toggle input:checked ~ .toggle-track{background:rgba(0,200,255,.15);border-color:var(--ac);}
-.toggle-thumb{position:absolute;top:3px;left:3px;width:14px;height:14px;border-radius:50%;background:var(--tx3);transition:transform .2s,background .2s;}
-.toggle input:checked ~ .toggle-track ~ .toggle-thumb{transform:translateX(18px);background:var(--ac);box-shadow:0 0 6px rgba(0,200,255,.5);}
-
-/* DATEN */
+.trow{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.tlbl{font-family:var(--fm);font-size:10px;color:var(--tx);}
+.tog{position:relative;width:42px;height:23px;cursor:pointer;flex-shrink:0;}
+.tog input{opacity:0;width:0;height:0;}
+.tog-track{position:absolute;inset:0;border-radius:12px;background:var(--b1);border:1px solid var(--b2);transition:background .2s;}
+.tog input:checked~.tog-track{background:rgba(0,200,255,.12);border-color:var(--ac);}
+.tog-thumb{position:absolute;top:3px;left:3px;width:15px;height:15px;border-radius:50%;background:var(--tx3);transition:transform .2s,background .2s;}
+.tog input:checked~.tog-track~.tog-thumb{transform:translateX(19px);background:var(--ac);box-shadow:0 0 6px rgba(0,200,255,.5);}
 .dgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .dcard{background:var(--bg2);border:1px solid var(--b1);border-radius:5px;padding:10px 12px;}
 .dlbl{font-family:var(--fm);font-size:8px;color:var(--tx3);letter-spacing:1px;margin-bottom:4px;}
 .dval{font-family:var(--fm);font-size:19px;color:var(--wh);font-weight:600;line-height:1;}
-.dval.ac{color:var(--ac);}
-.dval.ac2{color:var(--ac2);}
-.dval.w{color:var(--warn);}
+.dval.ac{color:var(--ac);}.dval.ac2{color:var(--ac2);}.dval.w{color:var(--warn);}
 .dunit{font-size:9px;color:var(--tx3);}
 .qcard{background:var(--bg2);border:1px solid rgba(0,255,136,.12);border-radius:5px;padding:10px 12px;grid-column:1/-1;}
-.qtitle{font-family:var(--fm);font-size:8px;color:rgba(0,255,136,.45);letter-spacing:2px;margin-bottom:8px;}
+.qtitle{font-family:var(--fm);font-size:8px;color:rgba(0,255,136,.4);letter-spacing:2px;margin-bottom:8px;}
 .qrow{display:flex;justify-content:space-between;align-items:center;margin-bottom:7px;}
 .qrow:last-child{margin-bottom:0;}
 .ql{font-family:var(--fm);font-size:9px;color:var(--tx3);}
@@ -215,783 +117,286 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
 .qb{padding:2px 7px;border-radius:2px;font-family:var(--fm);font-size:8px;letter-spacing:1px;}
 .qb.ok{background:rgba(0,217,112,.1);color:var(--ok);border:1px solid rgba(0,217,112,.2);}
 .qb.w{background:rgba(255,170,0,.1);color:var(--warn);border:1px solid rgba(255,170,0,.2);}
-
-/* PROTOKOLL */
-.loglist{background:var(--bg2);border:1px solid var(--b1);border-radius:5px;padding:8px 10px;overflow-y:auto;flex:1;min-height:120px;}
+.loglist{background:var(--bg2);border:1px solid var(--b1);border-radius:5px;padding:8px 10px;overflow-y:auto;flex:1;}
 .le{display:flex;gap:8px;margin-bottom:5px;font-family:var(--fm);font-size:9px;line-height:1.5;}
 .lt{color:var(--tx3);flex-shrink:0;}
-.lm{color:var(--tx2);}
-.lm.ok{color:var(--ok);}
-.lm.w{color:var(--warn);}
-.lm.i{color:var(--ac);}
-
-/* EMG */
-.emg{position:fixed;inset:0;background:rgba(255,0,0,.09);border:3px solid var(--danger);z-index:999;
-  display:none;align-items:center;justify-content:center;pointer-events:none;}
+.lm{color:var(--tx2);}.lm.ok{color:var(--ok);}.lm.w{color:var(--warn);}.lm.i{color:var(--ac);}
+.emg{position:fixed;inset:0;background:rgba(255,0,0,.09);border:3px solid var(--danger);z-index:999;display:none;align-items:center;justify-content:center;pointer-events:none;}
 .emg.show{display:flex;animation:ef .5s ease-in-out infinite alternate;}
 @keyframes ef{from{opacity:.5}to{opacity:1}}
-.emg-txt{font-family:var(--fh);font-size:30px;font-weight:700;color:var(--danger);
-  text-shadow:0 0 20px rgba(255,60,60,.8);letter-spacing:4px;text-align:center;}
-
-/* Loading overlay */
-.cv-loading{position:fixed;inset:0;background:rgba(7,9,11,.95);z-index:50;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;}
-.cv-loading p{font-family:var(--fm);font-size:10px;color:var(--tx2);letter-spacing:2px;text-align:center;line-height:2;}
-.cv-loading.hide{display:none;}
-.spinner{width:36px;height:36px;border:2px solid var(--b2);border-top-color:var(--ac);border-radius:50%;animation:spin .8s linear infinite;}
-@keyframes spin{to{transform:rotate(360deg)}}
-.cv-logo{font-family:var(--fh);font-size:26px;font-weight:700;letter-spacing:4px;color:var(--ac);
-  text-shadow:0 0 20px rgba(0,200,255,.4);margin-bottom:10px;}
+.emg-txt{font-family:var(--fh);font-size:30px;font-weight:700;color:var(--danger);text-shadow:0 0 20px rgba(255,60,60,.8);letter-spacing:4px;text-align:center;}
 </style>
 </head>
 <body>
-
-<!-- Loading Screen -->
-<div class="cv-loading" id="cvLoading">
-  <div class="cv-logo">STRASSE</div>
-  <div class="spinner"></div>
-  <p>OPENCV.JS WIRD GELADEN<br><span id="cvStatus">Initialisierung...</span></p>
-</div>
-
-<!-- Emergency -->
-<div class="emg" id="emg"><div class="emg-txt">⚠ NOT-AUS<br>AKTIV</div></div>
-
-<div class="app" id="mainApp" style="display:none;">
-
-  <!-- TOPBAR -->
+<div class="emg" id="emg"><div class="emg-txt">NOT-AUS<br>AKTIV</div></div>
+<div class="app">
   <div class="topbar">
     <div class="logo">STRASSE<small>CV LIVE</small></div>
     <div class="sep"></div>
-    <div class="cv-badge loading" id="cvBadge"><div class="dot"></div><span id="cvBadgeText">CV LÄDT</span></div>
+    <div class="badge"><div class="dot"></div><span>CV BEREIT</span></div>
     <div style="width:8px;"></div>
     <div class="clock" id="clock">--:--</div>
   </div>
-
-  <!-- CAMERA -->
   <div class="cam-wrap" id="camWrap">
     <div class="road-bg" id="roadBg"></div>
     <div class="road-line" id="roadLine"></div>
-
     <video id="vid" autoplay playsinline muted></video>
-    <canvas id="procCanvas"></canvas>
-    <canvas id="dispCanvas"></canvas>
-
-    <!-- Camera request -->
+    <canvas id="proc"></canvas>
+    <canvas id="disp"></canvas>
     <div class="cam-req" id="camReq">
-      <p>📷 KAMERA AKTIVIEREN<br>FÜR LIVE CV-ERKENNUNG</p>
-      <button class="cam-req-btn" onclick="startCam()">KAMERA STARTEN</button>
-      <p class="cam-req-note">OpenCV.js Echtzeit-Bildverarbeitung</p>
+      <p>KAMERA AKTIVIEREN<br>FUR LIVE CV-ERKENNUNG</p>
+      <button class="cam-btn" onclick="startCam()">KAMERA STARTEN</button>
+      <p class="cam-note">Pure JS Engine - kein Download noetig</p>
     </div>
-
-    <!-- Camera flip -->
-    <button class="flip-btn" id="flipBtn" onclick="flipCam()">🔄 KAMERA WECHSELN</button>
-
-    <!-- HUD -->
-    <div class="hud-tl">
-      FPS&nbsp; <span id="hFps">--</span><br>
-      RES&nbsp; <span id="hRes">--</span><br>
-      CAM&nbsp; <span id="hCam">--</span>
-    </div>
-    <div class="hud-tr">
-      CLAHE&nbsp; <span id="hClahe" style="color:var(--ac2)">ON</span><br>
-      HOUGH&nbsp; <span id="hHough" style="color:var(--ac2)">ON</span><br>
-      ROI&nbsp;&nbsp;&nbsp; <span id="hRoi" style="color:var(--ac2)">ON</span>
-    </div>
-    <div class="hud-bl">
-      <div class="detect-pill lost" id="detectPill">
-        <div class="dp"></div>
-        <span id="detectTxt">WARTE...</span>
-      </div>
-    </div>
-    <div class="hud-bc">
-      <div class="conf-pill">
-        <span class="cl">KONF</span>
-        <div class="conf-track"><div class="conf-fill" id="confFill" style="width:0%"></div></div>
-        <span class="conf-pct" id="confPct">--%</span>
-      </div>
-    </div>
-    <div class="hud-br">
-      T&nbsp;<span id="hProc">--</span>ms<br>
-      F&nbsp;<span id="hFrame">0</span>
-    </div>
-
-    <!-- Offset bar -->
+    <button class="flip-btn" id="flipBtn" onclick="flipCam()">KAMERA WECHSELN</button>
+    <div class="hud-tl">FPS <span id="hFps">--</span><br>RES <span id="hRes">--</span><br>CAM <span id="hCam">--</span></div>
+    <div class="hud-tr">CLAHE <span id="hC" style="color:var(--ac2)">ON</span><br>CANNY <span style="color:var(--ac2)">ON</span><br>ROI <span id="hR" style="color:var(--ac2)">ON</span></div>
+    <div class="hud-bl"><div class="det-pill lost" id="detPill"><div class="dp"></div><span id="detTxt">WARTE...</span></div></div>
+    <div class="hud-bc"><div class="conf-pill"><span class="cl">KONF</span><div class="ctrack"><div class="cfill" id="confFill" style="width:0%"></div></div><span class="cpct" id="confPct">--%</span></div></div>
+    <div class="hud-br">T <span id="hT">--</span>ms<br>F <span id="hF">0</span></div>
     <div class="off-bar">
       <span class="off-lbl">LAT-VERSATZ</span>
-      <div class="off-track">
-        <div class="off-ctr"></div>
-        <div class="off-dot" id="offDot" style="left:50%"></div>
-      </div>
+      <div class="off-track"><div class="off-ctr"></div><div class="off-dot" id="offDot" style="left:50%"></div></div>
       <span class="off-val" id="offVal">-- mm</span>
     </div>
   </div>
-
-  <!-- TABS -->
   <div class="tabs">
     <div class="tab active" onclick="switchTab('ctrl',this)"><span class="ti">🎮</span>STEUERUNG</div>
     <div class="tab" onclick="switchTab('param',this)"><span class="ti">⚙</span>PARAMETER</div>
     <div class="tab" onclick="switchTab('data',this)"><span class="ti">📊</span>DATEN</div>
     <div class="tab" onclick="switchTab('log',this)"><span class="ti">📋</span>LOG</div>
   </div>
-
-  <!-- PANELS -->
   <div class="panels" id="panelsWrap">
-
-    <!-- STEUERUNG -->
     <div class="panel active" id="panel-ctrl">
-      <button class="spray-btn" id="sprayBtn" onclick="toggleSpray()">
-        <span id="sprayIco">▶</span><span id="sprayLbl">SPRÜHEN</span>
-      </button>
-      <div class="mode-grid">
-        <div class="mbtn active" onclick="setMode('auto',this)"><span class="ic">⚙</span>AUTO</div>
-        <div class="mbtn" onclick="setMode('manual',this)"><span class="ic">🎮</span>MANUELL</div>
-        <div class="mbtn" onclick="setMode('scan',this)"><span class="ic">📷</span>NUR SCAN</div>
-        <div class="mbtn" onclick="setMode('calib',this)"><span class="ic">⊕</span>KALIB.</div>
+      <button class="spray-btn" id="sprayBtn" onclick="toggleSpray()"><span id="sprayIco">▶</span><span id="sprayLbl">SPRUEHEN</span></button>
+      <div class="mgrid">
+        <div class="mbtn active" onclick="setMode(this)"><span class="ic">⚙</span>AUTO</div>
+        <div class="mbtn" onclick="setMode(this)"><span class="ic">🎮</span>MANUELL</div>
+        <div class="mbtn" onclick="setMode(this)"><span class="ic">📷</span>NUR SCAN</div>
+        <div class="mbtn" onclick="setMode(this)"><span class="ic">⊕</span>KALIB.</div>
       </div>
-      <button class="notaus" id="notausBtn" onclick="triggerEmg()">⬡ NOT-AUS</button>
+      <button class="notaus" id="notausBtn" onclick="triggerEmg()">NOT-AUS</button>
     </div>
-
-    <!-- PARAMETER -->
     <div class="panel" id="panel-param">
       <div class="plbl">Bildverarbeitung</div>
-      <div class="toggle-row">
-        <span class="toggle-lbl">CLAHE Kontrastverbesserung</span>
-        <label class="toggle"><input type="checkbox" checked id="togClahe" onchange="updateCvParams()"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
-      </div>
-      <div class="toggle-row">
-        <span class="toggle-lbl">Hough-Liniendetektion</span>
-        <label class="toggle"><input type="checkbox" checked id="togHough" onchange="updateCvParams()"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
-      </div>
-      <div class="toggle-row">
-        <span class="toggle-lbl">ROI (Region of Interest)</span>
-        <label class="toggle"><input type="checkbox" checked id="togRoi" onchange="updateCvParams()"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
-      </div>
-      <div class="toggle-row">
-        <span class="toggle-lbl">Linienstabilisierung (5-Frame Avg)</span>
-        <label class="toggle"><input type="checkbox" checked id="togSmooth"><div class="toggle-track"></div><div class="toggle-thumb"></div></label>
-      </div>
-      <div class="srow">
-        <div class="shdr"><span class="sname">CLAHE CLIP LIMIT</span><span class="sval" id="svClahe">2.0</span></div>
-        <input type="range" min="10" max="80" value="20" id="slClahe" oninput="document.getElementById('svClahe').textContent=(this.value/10).toFixed(1);updateCvParams()">
-      </div>
-      <div class="srow">
-        <div class="shdr"><span class="sname">CANNY THRESHOLD LOW</span><span class="sval" id="svCanny1">50</span></div>
-        <input type="range" min="10" max="150" value="50" id="slCanny1" oninput="document.getElementById('svCanny1').textContent=this.value;updateCvParams()">
-      </div>
-      <div class="srow">
-        <div class="shdr"><span class="sname">CANNY THRESHOLD HIGH</span><span class="sval" id="svCanny2">150</span></div>
-        <input type="range" min="50" max="300" value="150" id="slCanny2" oninput="document.getElementById('svCanny2').textContent=this.value;updateCvParams()">
-      </div>
-      <div class="srow">
-        <div class="shdr"><span class="sname">HOUGH SCHWELLE</span><span class="sval" id="svHough">40</span></div>
-        <input type="range" min="10" max="120" value="40" id="slHough" oninput="document.getElementById('svHough').textContent=this.value;updateCvParams()">
-      </div>
-      <div class="srow">
-        <div class="shdr"><span class="sname">ROI HÖHE</span><span class="sval" id="svRoi">55%</span></div>
-        <input type="range" min="20" max="80" value="55" id="slRoi" oninput="document.getElementById('svRoi').textContent=this.value+'%';updateCvParams()">
-      </div>
+      <div class="trow"><span class="tlbl">CLAHE Kontrastverbesserung</span><label class="tog"><input type="checkbox" checked id="togClahe" onchange="updateP()"><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
+      <div class="trow"><span class="tlbl">ROI (untere Bildhälfte)</span><label class="tog"><input type="checkbox" checked id="togRoi" onchange="updateP()"><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
+      <div class="trow"><span class="tlbl">Linienstabilisierung</span><label class="tog"><input type="checkbox" checked id="togSmooth"><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
+      <div class="srow"><div class="shdr"><span class="sname">CANNY THRESHOLD</span><span class="sval" id="sv1">50</span></div><input type="range" min="10" max="120" value="50" oninput="document.getElementById('sv1').textContent=this.value;p.cannyLow=+this.value;p.cannyHigh=+this.value*2.5|0"></div>
+      <div class="srow"><div class="shdr"><span class="sname">HOUGH EMPFINDLICHKEIT</span><span class="sval" id="sv2">40</span></div><input type="range" min="5" max="100" value="40" oninput="document.getElementById('sv2').textContent=this.value;p.hough=+this.value"></div>
+      <div class="srow"><div class="shdr"><span class="sname">ROI HOEHE</span><span class="sval" id="sv3">60%</span></div><input type="range" min="20" max="85" value="60" oninput="document.getElementById('sv3').textContent=this.value+'%';p.roiH=this.value/100"></div>
       <div class="plbl" style="margin-top:4px;">Sprühparameter</div>
-      <div class="srow">
-        <div class="shdr"><span class="sname">SPRÜHDRUCK</span><span class="sval" id="svPres">3.2 bar</span></div>
-        <input type="range" min="10" max="60" value="32" oninput="document.getElementById('svPres').textContent=(this.value/10).toFixed(1)+' bar'">
-      </div>
-      <div class="srow">
-        <div class="shdr"><span class="sname">PUMPENRATE</span><span class="sval" id="svPump">68%</span></div>
-        <input type="range" class="g" min="0" max="100" value="68" oninput="document.getElementById('svPump').textContent=this.value+'%'">
-      </div>
+      <div class="srow"><div class="shdr"><span class="sname">SPRUEHDRUCK</span><span class="sval" id="sv4">3.2 bar</span></div><input type="range" min="10" max="60" value="32" oninput="document.getElementById('sv4').textContent=(this.value/10).toFixed(1)+' bar'"></div>
+      <div class="srow"><div class="shdr"><span class="sname">PUMPENRATE</span><span class="sval" id="sv5">68%</span></div><input type="range" class="g" min="0" max="100" value="68" oninput="document.getElementById('sv5').textContent=this.value+'%'"></div>
     </div>
-
-    <!-- DATEN -->
     <div class="panel" id="panel-data">
       <div class="dgrid">
-        <div class="dcard"><div class="dlbl">LINIEN ERKANNT</div><div class="dval ac" id="dLines">0</div></div>
+        <div class="dcard"><div class="dlbl">FRAMES TOTAL</div><div class="dval ac" id="dFr">0</div></div>
         <div class="dcard"><div class="dlbl">ERKENNUNGSRATE</div><div class="dval ac2" id="dRate">--%</div></div>
         <div class="dcard"><div class="dlbl">Ø KONFIDENZ</div><div class="dval" id="dConf">--%</div></div>
         <div class="dcard"><div class="dlbl">VERARBZEIT</div><div class="dval" id="dProc">-- ms</div></div>
-        <div class="dcard"><div class="dlbl">FRAMES TOTAL</div><div class="dval ac" id="dFrames">0</div></div>
-        <div class="dcard"><div class="dlbl">FRAMES MIT LINIE</div><div class="dval ac2" id="dHits">0</div></div>
+        <div class="dcard"><div class="dlbl">LINIEN ERKANNT</div><div class="dval ac" id="dLn">0</div></div>
+        <div class="dcard"><div class="dlbl">FPS</div><div class="dval ac2" id="dFps">--</div></div>
         <div class="qcard">
           <div class="qtitle">AKTUELLE MESSUNG</div>
           <div class="qrow"><span class="ql">LAT-VERSATZ</span><span class="qv" id="qOff">-- mm</span><span class="qb ok" id="qOffB">--</span></div>
-          <div class="qrow"><span class="ql">LINIENBREITE</span><span class="qv" id="qWidth">-- px</span><span class="qb ok" id="qWidthB">--</span></div>
-          <div class="qrow"><span class="ql">LINIEN GEFUNDEN</span><span class="qv" id="qCount">--</span><span class="qb ok">LIVE</span></div>
-          <div class="qrow"><span class="ql">LETZTER HIT</span><span class="qv" id="qLast">--</span></div>
+          <div class="qrow"><span class="ql">LINIEN IM BILD</span><span class="qv" id="qCnt">--</span><span class="qb ok">LIVE</span></div>
+          <div class="qrow"><span class="ql">STAERKSTE LINIE</span><span class="qv" id="qStr">-- px</span></div>
+          <div class="qrow"><span class="ql">LETZTER TREFFER</span><span class="qv" id="qLast">--</span></div>
         </div>
       </div>
     </div>
-
-    <!-- LOG -->
     <div class="panel" id="panel-log">
-      <div class="loglist" id="logList">
-        <div class="plbl" style="margin-bottom:8px;">SYSTEMPROTOKOLL</div>
-      </div>
+      <div class="loglist" id="logList"><div class="plbl" style="margin-bottom:8px;">SYSTEMPROTOKOLL</div></div>
     </div>
-
   </div>
 </div>
-
 <script>
-// ════════════════════════════════════════════════════
-//  STRASSE — Live CV Engine
-//  OpenCV.js Echtzeit Linienerkennung
-// ════════════════════════════════════════════════════
+const p={cannyLow:50,cannyHigh:120,hough:40,roiH:0.60,useClahe:true,useRoi:true};
+let camStream=null,facing='environment',animId=null,sprayActive=false,emergency=false;
+let frameCount=0,hitCount=0,totalConf=0,totalLines=0,lineHistory=[],fpsCount=0,fps=0,fpsTimer=0,lastHit='--';
+const SMOOTH=6;
 
-// ── OpenCV State ──────────────────────────────────
-let cvReady = false;
-let camStream = null;
-let facingMode = 'environment';
-let processing = false;
-let animId = null;
+setInterval(()=>{document.getElementById('clock').textContent=new Date().toLocaleTimeString('de-AT',{hour12:false,hour:'2-digit',minute:'2-digit'});},1000);
 
-// ── CV Parameters (live-tunable) ──────────────────
-let cvParams = {
-  useClahe: true,
-  claheClip: 2.0,
-  useHough: true,
-  cannyLow: 50,
-  cannyHigh: 150,
-  houghThreshold: 40,
-  useRoi: true,
-  roiHeight: 0.55,  // fraction from bottom
-};
-
-// ── Statistics ────────────────────────────────────
-let stats = {
-  frames: 0,
-  hits: 0,
-  totalConf: 0,
-  linesDetected: 0,
-};
-
-// ── Line smoothing buffer (5 frames) ─────────────
-let lineBuffer = [];
-const SMOOTH_N = 5;
-
-// ── Spray / Emergency state ───────────────────────
-let sprayActive = false;
-let emergency = false;
-
-// ── OpenCV Ready Callback ─────────────────────────
-function onOpenCvReady() {
-  log('OpenCV.js geladen — Version ' + cv.version.major + '.' + cv.version.minor, 'ok');
-  cvReady = true;
-  document.getElementById('cvBadge').className = 'cv-badge ready';
-  document.getElementById('cvBadgeText').textContent = 'CV BEREIT';
-  document.getElementById('cvLoading').classList.add('hide');
-  document.getElementById('mainApp').style.display = 'flex';
-  layout();
-  log('STRASSE CV Engine bereit', 'ok');
+function layout(){
+  const appH=window.innerHeight,topH=46,tabH=document.querySelector('.tabs').offsetHeight;
+  const panH=Math.round(appH*0.36),camH=appH-topH-tabH-panH;
+  document.querySelector('.cam-wrap').style.height=Math.max(camH,180)+'px';
+  document.getElementById('panelsWrap').style.height=panH+'px';
 }
-function onOpenCvError() {
-  document.getElementById('cvStatus').textContent = 'Fehler beim Laden — Simulation aktiv';
-  document.getElementById('cvBadge').className = 'cv-badge error';
-  document.getElementById('cvBadgeText').textContent = 'CV FEHLER';
-  setTimeout(() => {
-    document.getElementById('cvLoading').classList.add('hide');
-    document.getElementById('mainApp').style.display = 'flex';
-    layout();
-    log('OpenCV nicht verfügbar — Simulation läuft', 'w');
-    startSimMode();
-  }, 2000);
+layout();window.addEventListener('resize',layout);
+
+function switchTab(id,el){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  el.classList.add('active');document.getElementById('panel-'+id).classList.add('active');
 }
 
-// ── Clock ─────────────────────────────────────────
-function tick() {
-  document.getElementById('clock').textContent =
-    new Date().toLocaleTimeString('de-AT',{hour12:false,hour:'2-digit',minute:'2-digit'});
-}
-tick(); setInterval(tick, 1000);
-
-// ── Layout ────────────────────────────────────────
-function layout() {
-  const appH = window.innerHeight;
-  const topH = document.querySelector('.topbar').offsetHeight;
-  const tabH = document.querySelector('.tabs').offsetHeight;
-  const camH = Math.min(Math.max(appH * 0.44, 180), appH * 0.54);
-  const panH = appH - topH - camH - tabH;
-  document.querySelector('.cam-wrap').style.cssText += `;height:${camH}px;flex:none;`;
-  document.getElementById('panelsWrap').style.height = panH + 'px';
-}
-layout();
-window.addEventListener('resize', layout);
-
-// ── Tabs ──────────────────────────────────────────
-function switchTab(id, el) {
-  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  el.classList.add('active');
-  document.getElementById('panel-'+id).classList.add('active');
-}
-
-// ── Camera ────────────────────────────────────────
-async function startCam() {
-  try {
-    if (camStream) camStream.getTracks().forEach(t => t.stop());
-    const constraints = {
-      video: {
-        facingMode: {ideal: facingMode},
-        width: {ideal: 1280}, height: {ideal: 720}
-      }, audio: false
-    };
-    camStream = await navigator.mediaDevices.getUserMedia(constraints);
-    const vid = document.getElementById('vid');
-    vid.srcObject = camStream;
-    vid.style.display = 'block';
-    document.getElementById('camReq').style.display = 'none';
-    document.getElementById('flipBtn').style.display = 'flex';
-    document.getElementById('hCam').textContent = facingMode === 'user' ? 'FRONT' : 'REAR';
-    document.getElementById('roadBg').style.display = 'none';
-    document.getElementById('roadLine').style.display = 'none';
-
-    // Mirror front camera
-    vid.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
-
-    await new Promise(r => vid.onloadedmetadata = r);
-    document.getElementById('hRes').textContent = vid.videoWidth + 'x' + vid.videoHeight;
-    log('Kamera aktiv: ' + (facingMode==='user'?'Front':'Rear') + ' ' + vid.videoWidth + 'x' + vid.videoHeight, 'ok');
-
-    if (cvReady) startCvLoop();
-    else log('Warte auf OpenCV...', 'i');
-  } catch(e) {
-    log('Kamera: ' + (e.name==='NotAllowedError'?'Zugriff verweigert':e.message), 'w');
-    document.getElementById('camReq').innerHTML =
-      '<p style="color:var(--warn);">⚠ Kamera nicht verfügbar</p><p class="cam-req-note" style="margin-top:8px;">Simulation läuft weiter</p>';
-    setTimeout(() => document.getElementById('camReq').style.display = 'none', 2500);
+async function startCam(){
+  try{
+    if(camStream)camStream.getTracks().forEach(t=>t.stop());
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing},width:{ideal:1280},height:{ideal:720}},audio:false});
+    const vid=document.getElementById('vid');
+    vid.srcObject=camStream;vid.style.display='block';
+    vid.style.transform=facing==='user'?'scaleX(-1)':'none';
+    document.getElementById('camReq').style.display='none';
+    document.getElementById('flipBtn').style.display='flex';
+    document.getElementById('hCam').textContent=facing==='user'?'FRONT':'REAR';
+    document.getElementById('roadBg').style.display='none';
+    document.getElementById('roadLine').style.display='none';
+    await new Promise(r=>{vid.onloadedmetadata=r;});
+    document.getElementById('hRes').textContent=vid.videoWidth+'x'+vid.videoHeight;
+    log('Kamera: '+(facing==='user'?'Front':'Rear')+' '+vid.videoWidth+'x'+vid.videoHeight,'ok');
+    startLoop();
+  }catch(e){
+    log('Kamera-Fehler: '+(e.name==='NotAllowedError'?'Zugriff verweigert':e.message),'w');
+    document.getElementById('camReq').innerHTML='<p style="color:var(--warn)">Kamera nicht verfuegbar<br><small style="color:var(--tx3)">Demo laeuft weiter</small></p>';
+    setTimeout(()=>document.getElementById('camReq').style.display='none',3000);
+    startSimLoop();
   }
 }
-
-async function flipCam() {
-  facingMode = facingMode === 'environment' ? 'user' : 'environment';
-  if (animId) { cancelAnimationFrame(animId); animId = null; }
-  await startCam();
+async function flipCam(){facing=facing==='environment'?'user':'environment';if(animId){cancelAnimationFrame(animId);animId=null;}await startCam();}
+function updateP(){
+  p.useClahe=document.getElementById('togClahe').checked;p.useRoi=document.getElementById('togRoi').checked;
+  document.getElementById('hC').textContent=p.useClahe?'ON':'OFF';document.getElementById('hC').style.color=p.useClahe?'var(--ac2)':'var(--tx3)';
+  document.getElementById('hR').textContent=p.useRoi?'ON':'OFF';document.getElementById('hR').style.color=p.useRoi?'var(--ac2)':'var(--tx3)';
 }
 
-// ── CV Parameter Update ───────────────────────────
-function updateCvParams() {
-  cvParams.useClahe   = document.getElementById('togClahe').checked;
-  cvParams.claheClip  = parseFloat(document.getElementById('slClahe').value) / 10;
-  cvParams.useHough   = document.getElementById('togHough').checked;
-  cvParams.cannyLow   = parseInt(document.getElementById('slCanny1').value);
-  cvParams.cannyHigh  = parseInt(document.getElementById('slCanny2').value);
-  cvParams.houghThreshold = parseInt(document.getElementById('slHough').value);
-  cvParams.useRoi     = document.getElementById('togRoi').checked;
-  cvParams.roiHeight  = parseInt(document.getElementById('slRoi').value) / 100;
+// Gaussian 5x5
+const G5=[2,4,5,4,2,4,9,12,9,4,5,12,15,12,5,4,9,12,9,4,2,4,5,4,2],G5S=159;
+function gaussBlur(g,w,h){const o=new Uint8Array(g.length);for(let y=2;y<h-2;y++){for(let x=2;x<w-2;x++){let s=0;for(let ky=-2;ky<=2;ky++)for(let kx=-2;kx<=2;kx++)s+=g[(y+ky)*w+(x+kx)]*G5[(ky+2)*5+(kx+2)];o[y*w+x]=s/G5S|0;}}return o;}
 
-  document.getElementById('hClahe').textContent = cvParams.useClahe ? 'ON' : 'OFF';
-  document.getElementById('hClahe').style.color = cvParams.useClahe ? 'var(--ac2)' : 'var(--tx3)';
-  document.getElementById('hHough').textContent = cvParams.useHough ? 'ON' : 'OFF';
-  document.getElementById('hHough').style.color = cvParams.useHough ? 'var(--ac2)' : 'var(--tx3)';
-  document.getElementById('hRoi').textContent   = cvParams.useRoi   ? 'ON' : 'OFF';
-  document.getElementById('hRoi').style.color   = cvParams.useRoi   ? 'var(--ac2)' : 'var(--tx3)';
+function clahe(g,w,h){
+  const o=new Uint8Array(g.length),TW=48,TH=48;
+  for(let ty=0;ty<h;ty+=TH){for(let tx=0;tx<w;tx+=TW){
+    const tw=Math.min(TW,w-tx),th=Math.min(TH,h-ty);
+    const hist=new Int32Array(256);
+    for(let y=ty;y<ty+th;y++)for(let x=tx;x<tx+tw;x++)hist[g[y*w+x]]++;
+    const lim=Math.floor(2.5*tw*th/256);let ex=0;
+    for(let i=0;i<256;i++){if(hist[i]>lim){ex+=hist[i]-lim;hist[i]=lim;}}
+    const add=ex/256|0;for(let i=0;i<256;i++)hist[i]+=add;
+    const cdf=new Int32Array(256);cdf[0]=hist[0];for(let i=1;i<256;i++)cdf[i]=cdf[i-1]+hist[i];
+    const cmin=cdf.find(v=>v>0)||1,tot=tw*th;
+    for(let y=ty;y<ty+th;y++)for(let x=tx;x<tx+tw;x++)o[y*w+x]=Math.round((cdf[g[y*w+x]]-cmin)/(tot-cmin)*255);
+  }}return o;
 }
 
-// ════════════════════════════════════════════════════
-//  OPENCV.JS PROCESSING LOOP
-// ════════════════════════════════════════════════════
-function startCvLoop() {
-  if (animId) cancelAnimationFrame(animId);
-  log('CV-Pipeline gestartet', 'ok');
+function sobel(img,w,h){const mag=new Float32Array(w*h),ang=new Float32Array(w*h);for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){const gx=-img[(y-1)*w+(x-1)]-2*img[y*w+(x-1)]-img[(y+1)*w+(x-1)]+img[(y-1)*w+(x+1)]+2*img[y*w+(x+1)]+img[(y+1)*w+(x+1)];const gy=-img[(y-1)*w+(x-1)]-2*img[(y-1)*w+x]-img[(y-1)*w+(x+1)]+img[(y+1)*w+(x-1)]+2*img[(y+1)*w+x]+img[(y+1)*w+(x+1)];mag[y*w+x]=Math.sqrt(gx*gx+gy*gy);ang[y*w+x]=Math.atan2(gy,gx);}}return{mag,ang};}
 
-  const vid     = document.getElementById('vid');
-  const proc    = document.getElementById('procCanvas');
-  const disp    = document.getElementById('dispCanvas');
-  const ctxDisp = disp.getContext('2d');
+function nms(mag,ang,w,h){const o=new Float32Array(w*h);for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){const a=(ang[y*w+x]*180/Math.PI+180)%180;let n1,n2;if(a<22.5||a>=157.5){n1=mag[y*w+(x-1)];n2=mag[y*w+(x+1)];}else if(a<67.5){n1=mag[(y-1)*w+(x+1)];n2=mag[(y+1)*w+(x-1)];}else if(a<112.5){n1=mag[(y-1)*w+x];n2=mag[(y+1)*w+x];}else{n1=mag[(y-1)*w+(x-1)];n2=mag[(y+1)*w+(x+1)];}const m=mag[y*w+x];o[y*w+x]=(m>=n1&&m>=n2)?m:0;}}return o;}
 
-  let fpsFrames = 0, fpsLast = performance.now(), fps = 0;
-  let frameCount = 0;
-  let lastHitTime = '--';
+function hysteresis(s,w,h,lo,hi){const o=new Uint8Array(w*h);for(let i=0;i<w*h;i++){if(s[i]>=hi)o[i]=255;else if(s[i]>=lo)o[i]=128;}for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){if(o[y*w+x]===128){const c=o[(y-1)*w+(x-1)]===255||o[(y-1)*w+x]===255||o[(y-1)*w+(x+1)]===255||o[y*w+(x-1)]===255||o[y*w+(x+1)]===255||o[(y+1)*w+(x-1)]===255||o[(y+1)*w+x]===255||o[(y+1)*w+(x+1)]===255;o[y*w+x]=c?255:0;}}return o;}
 
-  // Pre-allocate OpenCV Mats (avoid GC pressure)
-  let srcMat, grayMat, claheMat, blurMat, cannyMat, roiMat, linesMat;
-  let matsAllocated = false;
-
-  function allocateMats(w, h) {
-    if (matsAllocated) freeMats();
-    srcMat   = new cv.Mat(h, w, cv.CV_8UC4);
-    grayMat  = new cv.Mat(h, w, cv.CV_8UC1);
-    claheMat = new cv.Mat(h, w, cv.CV_8UC1);
-    blurMat  = new cv.Mat(h, w, cv.CV_8UC1);
-    cannyMat = new cv.Mat(h, w, cv.CV_8UC1);
-    roiMat   = null; // created per frame based on ROI
-    linesMat = new cv.Mat();
-    matsAllocated = true;
+function hough(edges,w,h,thresh,minLen,maxGap){
+  const diag=Math.sqrt(w*w+h*h)|0,TS=180,acc=new Int32Array(diag*2*TS);
+  const cosT=new Float32Array(TS),sinT=new Float32Array(TS);
+  for(let t=0;t<TS;t++){cosT[t]=Math.cos(t*Math.PI/180);sinT[t]=Math.sin(t*Math.PI/180);}
+  const pts=[];for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(edges[y*w+x]>0)pts.push(x,y);
+  for(let i=0;i<pts.length;i+=2){const x=pts[i],y=pts[i+1];for(let t=0;t<TS;t++){const r=(x*cosT[t]+y*sinT[t])|0,ri=r+diag;if(ri>=0&&ri<diag*2)acc[ri*TS+t]++;}}
+  const vis=new Uint8Array(diag*2*TS),peaks=[];
+  for(let ri=0;ri<diag*2;ri++)for(let t=0;t<TS;t++){if(acc[ri*TS+t]>=thresh&&!vis[ri*TS+t]){peaks.push([ri-diag,t,acc[ri*TS+t]]);for(let dr=-4;dr<=4;dr++)for(let dt=-4;dt<=4;dt++){const nr=ri+dr,nt=((t+dt)%TS+TS)%TS;if(nr>=0&&nr<diag*2)vis[nr*TS+nt]=1;}}}
+  peaks.sort((a,b)=>b[2]-a[2]);
+  const lines=[];
+  for(const[rho,t]of peaks.slice(0,10)){
+    const ct=cosT[t],st=sinT[t];
+    const proj=[];
+    for(let i=0;i<pts.length;i+=2){const x=pts[i],y=pts[i+1];const r2=(x*ct+y*st)|0;if(Math.abs(r2-rho)<=2)proj.push([(-x*st+y*ct)|0,x,y]);}
+    proj.sort((a,b)=>a[0]-b[0]);
+    let cur=null;
+    for(const[pr,x,y]of proj){if(!cur)cur={s:[x,y],e:[x,y],pr};else if(pr-cur.pr<=maxGap){cur.e=[x,y];cur.pr=pr;}else{const dx=cur.e[0]-cur.s[0],dy=cur.e[1]-cur.s[1],len=Math.sqrt(dx*dx+dy*dy);if(len>=minLen)lines.push({x1:cur.s[0],y1:cur.s[1],x2:cur.e[0],y2:cur.e[1],len});cur={s:[x,y],e:[x,y],pr};}}
+    if(cur){const dx=cur.e[0]-cur.s[0],dy=cur.e[1]-cur.s[1],len=Math.sqrt(dx*dx+dy*dy);if(len>=minLen)lines.push({x1:cur.s[0],y1:cur.s[1],x2:cur.e[0],y2:cur.e[1],len});}
   }
+  return lines;
+}
 
-  function freeMats() {
-    try {
-      [srcMat, grayMat, claheMat, blurMat, cannyMat, linesMat].forEach(m => { if(m && !m.isDeleted()) m.delete(); });
-      if (roiMat && !roiMat.isDeleted()) roiMat.delete();
-      matsAllocated = false;
-    } catch(e) {}
-  }
+function startLoop(){
+  if(animId)cancelAnimationFrame(animId);
+  log('CV-Pipeline gestartet (Pure JS)','ok');
+  log('Canny-Kantendetektion + Hough-Transformation aktiv','ok');
+  const vid=document.getElementById('vid'),proc=document.getElementById('proc'),disp=document.getElementById('disp');
+  const ctxP=proc.getContext('2d',{willReadFrequently:true}),ctxD=disp.getContext('2d');
+  const PW=320,PH=200;proc.width=PW;proc.height=PH;
 
-  function processFrame() {
-    if (emergency) { animId = requestAnimationFrame(processFrame); return; }
-    if (!vid.videoWidth || !vid.videoHeight || vid.readyState < 2) {
-      animId = requestAnimationFrame(processFrame); return;
-    }
-
-    const W = vid.videoWidth;
-    const H = vid.videoHeight;
-
-    // Setup canvases
-    if (proc.width !== W || proc.height !== H) {
-      proc.width = W; proc.height = H;
-      allocateMats(W, H);
-    }
-    disp.width = disp.offsetWidth * window.devicePixelRatio || disp.offsetWidth;
-    disp.height = disp.offsetHeight * window.devicePixelRatio || disp.offsetHeight;
-    const dW = disp.width, dH = disp.height;
-
-    const t0 = performance.now();
-
-    // ── Draw frame to proc canvas ──
-    const ctxProc = proc.getContext('2d');
-    ctxProc.drawImage(vid, 0, 0, W, H);
-    const imgData = ctxProc.getImageData(0, 0, W, H);
-    srcMat.data.set(imgData.data);
-
-    // ── Grayscale ──
-    cv.cvtColor(srcMat, grayMat, cv.COLOR_RGBA2GRAY);
-
-    // ── CLAHE (adaptive histogram equalization) ──
-    let workMat = grayMat;
-    if (cvParams.useClahe) {
-      const clahe = new cv.CLAHE(cvParams.claheClip, new cv.Size(8, 8));
-      clahe.apply(grayMat, claheMat);
-      clahe.delete();
-      workMat = claheMat;
-    }
-
-    // ── Gaussian Blur ──
-    cv.GaussianBlur(workMat, blurMat, new cv.Size(5, 5), 0);
-
-    // ── ROI Mask ──
-    let roiY = 0, roiH = H;
-    if (cvParams.useRoi) {
-      roiY = Math.floor(H * (1 - cvParams.roiHeight));
-      roiH = H - roiY;
-    }
-
-    // Extract ROI
-    const roiRect = new cv.Rect(0, roiY, W, roiH);
-    if (roiMat && !roiMat.isDeleted()) roiMat.delete();
-    roiMat = blurMat.roi(roiRect);
-
-    // ── Canny Edge Detection ──
-    const cannyRoi = new cv.Mat();
-    cv.Canny(roiMat, cannyRoi, cvParams.cannyLow, cvParams.cannyHigh);
-
-    // ── Hough Line Detection ──
-    let detectedLines = [];
-    let confidence = 0;
-
-    if (cvParams.useHough) {
-      const lines = new cv.Mat();
-      cv.HoughLinesP(
-        cannyRoi, lines,
-        1,           // rho resolution
-        Math.PI/180, // theta resolution
-        cvParams.houghThreshold,  // threshold
-        30,          // minLineLength
-        15           // maxLineGap
-      );
-
-      if (lines.rows > 0) {
-        // Extract line segments and compute midpoints
-        const rawLines = [];
-        for (let i = 0; i < lines.rows; i++) {
-          const x1 = lines.data32S[i*4];
-          const y1 = lines.data32S[i*4+1] + roiY;
-          const x2 = lines.data32S[i*4+2];
-          const y2 = lines.data32S[i*4+3] + roiY;
-          const len = Math.sqrt((x2-x1)**2 + (y2-y1)**2);
-          const angle = Math.abs(Math.atan2(y2-y1, x2-x1) * 180 / Math.PI);
-          // Filter: prefer near-vertical lines (road markings)
-          const isVertical = (angle > 60 && angle < 120) || angle < 20 || angle > 160;
-          rawLines.push({x1,y1,x2,y2,len,angle,isVertical});
-        }
-
-        // Sort by length, take strongest lines
-        rawLines.sort((a,b) => b.len - a.len);
-        detectedLines = rawLines.slice(0, Math.min(8, rawLines.length));
-
-        // Confidence: based on number of good lines + total length
-        const totalLen = detectedLines.reduce((s,l) => s+l.len, 0);
-        confidence = Math.min(100, Math.round((detectedLines.length * 8) + (totalLen / W * 30)));
-        confidence = Math.max(confidence, detectedLines.length > 0 ? 55 : 0);
-      }
-      lines.delete();
-    }
-
-    cannyRoi.delete();
-
-    const procTime = Math.round(performance.now() - t0);
-
-    // ── Line smoothing ──
-    const doSmooth = document.getElementById('togSmooth').checked;
-    let displayLines = detectedLines;
-    if (doSmooth && detectedLines.length > 0) {
-      lineBuffer.push(detectedLines[0]); // track strongest line
-      if (lineBuffer.length > SMOOTH_N) lineBuffer.shift();
-      const avgX = lineBuffer.reduce((s,l)=>s+(l.x1+l.x2)/2,0)/lineBuffer.length;
-      // Inject smoothed center
-      displayLines = [{...detectedLines[0], smoothX: avgX}];
-    } else if (doSmooth) {
-      if (lineBuffer.length > 0) lineBuffer.shift();
-    }
-
-    // ── Stats ──
+  function frame(){
+    if(!vid.videoWidth||vid.readyState<2){animId=requestAnimationFrame(frame);return;}
+    disp.width=disp.offsetWidth*(window.devicePixelRatio||1);
+    disp.height=disp.offsetHeight*(window.devicePixelRatio||1);
+    const DW=disp.width,DH=disp.height;
+    const t0=performance.now();
+    ctxP.drawImage(vid,0,0,PW,PH);
+    const id=ctxP.getImageData(0,0,PW,PH),px=id.data;
+    let gray=new Uint8Array(PW*PH);
+    for(let i=0;i<PW*PH;i++)gray[i]=(px[i*4]*77+px[i*4+1]*150+px[i*4+2]*29)>>8;
+    let roiY=0,roiH2=PH;
+    if(p.useRoi){roiY=Math.floor(PH*(1-p.roiH));roiH2=PH-roiY;}
+    let work=p.useClahe?clahe(gray,PW,PH):gray;
+    const blurred=gaussBlur(work,PW,PH);
+    const{mag,ang}=sobel(blurred,PW,PH);
+    const n=nms(mag,ang,PW,PH);
+    const edges=hysteresis(n,PW,PH,p.cannyLow,p.cannyHigh);
+    // Zero out non-ROI
+    if(p.useRoi)for(let y=0;y<roiY;y++)for(let x=0;x<PW;x++)edges[y*PW+x]=0;
+    let rawLines=hough(edges,PW,PH,p.hough,12,8);
+    rawLines.sort((a,b)=>b.len-a.len);
+    const lines=rawLines.slice(0,10);
+    const procTime=Math.round(performance.now()-t0);
+    const doSmooth=document.getElementById('togSmooth').checked;
+    if(doSmooth&&lines.length>0){lineHistory.push((lines[0].x1+lines[0].x2)/2);if(lineHistory.length>SMOOTH)lineHistory.shift();}
+    else if(!lines.length&&lineHistory.length)lineHistory.shift();
+    const smoothX=lineHistory.length?lineHistory.reduce((a,b)=>a+b,0)/lineHistory.length:null;
     frameCount++;
-    stats.frames = frameCount;
-    if (detectedLines.length > 0) {
-      stats.hits++;
-      stats.totalConf += confidence;
-      stats.linesDetected += detectedLines.length;
-      lastHitTime = new Date().toLocaleTimeString('de-AT',{hour12:false});
-    }
-    const detRate = frameCount > 0 ? Math.round(stats.hits/frameCount*100) : 0;
-    const avgConf = stats.hits > 0 ? Math.round(stats.totalConf/stats.hits) : 0;
-
-    // ── FPS ──
-    fpsFrames++;
-    const now = performance.now();
-    if (now - fpsLast >= 1000) {
-      fps = fpsFrames;
-      fpsFrames = 0;
-      fpsLast = now;
-    }
-
-    // ── Lateral offset calculation ──
-    let lateralOffset = 0;
-    let lineWidth = 0;
-    if (displayLines.length > 0) {
-      const l = displayLines[0];
-      const cx = l.smoothX !== undefined ? l.smoothX : (l.x1+l.x2)/2;
-      lateralOffset = Math.round((cx - W/2) / W * 200); // mm scale
-      lineWidth = Math.round(Math.abs(l.x2-l.x1) * 0.3); // approx px→mm
-    }
-
-    // ════════════════════════════
-    //  DRAW TO DISPLAY CANVAS
-    // ════════════════════════════
-    ctxDisp.clearRect(0, 0, dW, dH);
-    const scaleX = dW / W;
-    const scaleY = dH / H;
-
-    // Scale factors for mapping video coords → display coords
-    function sx(x) { return x * scaleX; }
-    function sy(y) { return y * scaleY; }
-
-    // ── Draw ROI overlay ──
-    if (cvParams.useRoi) {
-      ctxDisp.save();
-      ctxDisp.strokeStyle = 'rgba(0,200,255,0.2)';
-      ctxDisp.setLineDash([6,6]);
-      ctxDisp.lineWidth = 1;
-      ctxDisp.strokeRect(sx(0), sy(roiY), dW, sy(roiH));
-      ctxDisp.restore();
-      // ROI label
-      ctxDisp.fillStyle = 'rgba(0,200,255,0.35)';
-      ctxDisp.font = `${Math.max(9,dW*0.02)}px 'Share Tech Mono'`;
-      ctxDisp.fillText('ROI', sx(4), sy(roiY)+14);
-    }
-
-    // ── Draw Canny edges (subtle overlay) ──
-    // (skipped for performance — display canvas is separate)
-
-    // ── Draw detected lines ──
-    detectedLines.forEach((l, i) => {
-      const alpha = i === 0 ? 0.9 : 0.35;
-      const color = i === 0 ? `rgba(0,255,136,${alpha})` : `rgba(0,200,255,${alpha*0.6})`;
-      ctxDisp.save();
-      ctxDisp.strokeStyle = color;
-      ctxDisp.lineWidth = i === 0 ? 3 : 1.5;
-      ctxDisp.shadowColor = i === 0 ? 'rgba(0,255,136,0.5)' : 'transparent';
-      ctxDisp.shadowBlur = 8;
-      ctxDisp.beginPath();
-      ctxDisp.moveTo(sx(l.x1), sy(l.y1));
-      ctxDisp.lineTo(sx(l.x2), sy(l.y2));
-      ctxDisp.stroke();
-      ctxDisp.restore();
-    });
-
-    // ── Draw smoothed center line ──
-    if (doSmooth && lineBuffer.length >= 2) {
-      const avgX = lineBuffer.reduce((s,l)=>s+(l.x1+l.x2)/2,0)/lineBuffer.length;
-      ctxDisp.save();
-      ctxDisp.strokeStyle = 'rgba(255,200,0,0.5)';
-      ctxDisp.lineWidth = 2;
-      ctxDisp.setLineDash([4,4]);
-      ctxDisp.beginPath();
-      ctxDisp.moveTo(sx(avgX), sy(roiY));
-      ctxDisp.lineTo(sx(avgX), dH);
-      ctxDisp.stroke();
-      ctxDisp.setLineDash([]);
-      ctxDisp.restore();
-    }
-
-    // ── Draw center crosshair ──
-    ctxDisp.save();
-    ctxDisp.strokeStyle = 'rgba(0,200,255,0.15)';
-    ctxDisp.lineWidth = 1;
-    ctxDisp.beginPath(); ctxDisp.moveTo(dW/2,0); ctxDisp.lineTo(dW/2,dH); ctxDisp.stroke();
-    ctxDisp.beginPath(); ctxDisp.moveTo(0,dH*0.65); ctxDisp.lineTo(dW,dH*0.65); ctxDisp.stroke();
-    ctxDisp.restore();
-
-    // ── Draw nozzle indicator ──
-    if (sprayActive) {
-      const nx = dW/2, ny = dH*0.68;
-      ctxDisp.save();
-      ctxDisp.beginPath(); ctxDisp.arc(nx,ny,14,0,Math.PI*2);
-      ctxDisp.strokeStyle = 'rgba(0,255,136,0.85)';
-      ctxDisp.lineWidth = 2;
-      ctxDisp.shadowColor = 'rgba(0,255,136,0.6)'; ctxDisp.shadowBlur = 12;
-      ctxDisp.stroke();
-      ctxDisp.beginPath(); ctxDisp.arc(nx,ny,5,0,Math.PI*2);
-      ctxDisp.fillStyle = 'rgba(0,255,136,0.9)'; ctxDisp.fill();
-      // Spray cone
-      ctxDisp.beginPath();
-      ctxDisp.moveTo(nx,ny-14); ctxDisp.lineTo(nx-20,ny-55); ctxDisp.lineTo(nx+20,ny-55);
-      ctxDisp.closePath();
-      ctxDisp.fillStyle = 'rgba(180,220,255,0.1)'; ctxDisp.fill();
-      ctxDisp.restore();
-    }
-
-    // ── Corner brackets (ROI frame) ──
-    const cs = 16;
-    const bx1=sx(W*0.15), bx2=sx(W*0.85), by1=sy(roiY+4), by2=dH-50;
-    ctxDisp.save();
-    ctxDisp.strokeStyle='rgba(0,200,255,0.6)'; ctxDisp.lineWidth=2;
-    [[bx1,by1,1,1],[bx2,by1,-1,1],[bx1,by2,1,-1],[bx2,by2,-1,-1]].forEach(([x,y,dx,dy])=>{
-      ctxDisp.beginPath(); ctxDisp.moveTo(x,y+dy*cs); ctxDisp.lineTo(x,y); ctxDisp.lineTo(x+dx*cs,y); ctxDisp.stroke();
-    });
-    ctxDisp.restore();
-
-    // ── Scanline effect ──
-    const scanProgress = (Date.now() % 3000) / 3000;
-    const scanY = scanProgress * dH;
-    const sg = ctxDisp.createLinearGradient(0,scanY-4,0,scanY+4);
-    sg.addColorStop(0,'transparent'); sg.addColorStop(0.5,'rgba(0,200,255,0.08)'); sg.addColorStop(1,'transparent');
-    ctxDisp.fillStyle=sg; ctxDisp.fillRect(0,scanY-4,dW,8);
-
-    // ══════════════════════════════
-    //  UPDATE UI
-    // ══════════════════════════════
-    const detected = detectedLines.length > 0;
-
-    // Detection pill
-    const pill = document.getElementById('detectPill');
-    const ptxt = document.getElementById('detectTxt');
-    pill.className = 'detect-pill ' + (detected ? 'found' : 'lost');
-    ptxt.textContent = detected ? `ERKANNT (${detectedLines.length})` : 'KEINE LINIE';
-
-    // Confidence
-    document.getElementById('confFill').style.width = confidence + '%';
-    document.getElementById('confPct').textContent = confidence + '%';
-
-    // Proc time / frame
-    document.getElementById('hProc').textContent = procTime;
-    document.getElementById('hFrame').textContent = frameCount;
-    document.getElementById('hFps').textContent = fps;
-
-    // Offset bar
-    if (detected) {
-      const offPct = Math.max(5, Math.min(95, 50 + (lateralOffset/200)*50));
-      const warn = Math.abs(lateralOffset) > 30;
-      document.getElementById('offDot').style.left = offPct + '%';
-      document.getElementById('offDot').className = 'off-dot' + (warn?' w':'');
-      document.getElementById('offVal').textContent = (lateralOffset>=0?'+':'')+lateralOffset+' mm';
-      document.getElementById('offVal').className = 'off-val' + (warn?' w':'');
-    } else {
-      document.getElementById('offVal').textContent = '-- mm';
-    }
-
-    // Data panel
-    document.getElementById('dLines').textContent = stats.linesDetected;
-    document.getElementById('dRate').textContent = detRate + '%';
-    document.getElementById('dConf').textContent = avgConf + '%';
-    document.getElementById('dProc').textContent = procTime + ' ms';
-    document.getElementById('dFrames').textContent = frameCount;
-    document.getElementById('dHits').textContent = stats.hits;
-    document.getElementById('qOff').textContent = detected ? (lateralOffset>=0?'+':'')+lateralOffset+' mm' : '--';
-    document.getElementById('qOffB').className = 'qb '+(Math.abs(lateralOffset)<20?'ok':'w');
-    document.getElementById('qOffB').textContent = Math.abs(lateralOffset)<20?'OK':'WARN';
-    document.getElementById('qWidth').textContent = detected ? lineWidth+' mm' : '--';
-    document.getElementById('qWidthB').className = 'qb '+(detected?'ok':'w');
-    document.getElementById('qWidthB').textContent = detected?'OK':'--';
-    document.getElementById('qCount').textContent = detectedLines.length || '--';
-    document.getElementById('qLast').textContent = lastHitTime;
-
-    animId = requestAnimationFrame(processFrame);
+    const detected=lines.length>0;
+    let conf=0;
+    if(detected){hitCount++;const tl=lines.reduce((s,l)=>s+l.len,0);conf=Math.min(98,Math.round(lines.length*10+tl/PW*45));totalConf+=conf;totalLines+=lines.length;lastHit=new Date().toLocaleTimeString('de-AT',{hour12:false});}
+    fpsCount++;const now2=performance.now();if(now2-fpsTimer>=1000){fps=fpsCount;fpsCount=0;fpsTimer=now2;}
+    const sx=v=>v/PW*DW,sy=v=>v/PH*DH;
+    ctxD.clearRect(0,0,DW,DH);
+    // ROI shading
+    if(p.useRoi){ctxD.fillStyle='rgba(0,200,255,0.025)';ctxD.fillRect(0,sy(roiY),DW,DH-sy(roiY));ctxD.strokeStyle='rgba(0,200,255,0.2)';ctxD.lineWidth=1;ctxD.setLineDash([6,6]);ctxD.beginPath();ctxD.moveTo(0,sy(roiY));ctxD.lineTo(DW,sy(roiY));ctxD.stroke();ctxD.setLineDash([]);}
+    // Lines
+    lines.forEach((l,i)=>{const alpha=i===0?0.95:Math.max(0.2,0.55-i*0.08);ctxD.save();ctxD.strokeStyle=i===0?`rgba(0,255,136,${alpha})`:`rgba(0,200,255,${alpha})`;ctxD.lineWidth=i===0?3:1.5;if(i===0){ctxD.shadowColor='rgba(0,255,136,0.6)';ctxD.shadowBlur=10;}ctxD.beginPath();ctxD.moveTo(sx(l.x1),sy(l.y1));ctxD.lineTo(sx(l.x2),sy(l.y2));ctxD.stroke();ctxD.restore();});
+    // Smooth line
+    if(smoothX!==null){ctxD.save();ctxD.strokeStyle='rgba(255,210,0,0.45)';ctxD.lineWidth=2;ctxD.setLineDash([5,5]);ctxD.beginPath();ctxD.moveTo(sx(smoothX),sy(roiY));ctxD.lineTo(sx(smoothX),DH);ctxD.stroke();ctxD.setLineDash([]);ctxD.restore();}
+    // Crosshair
+    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.12)';ctxD.lineWidth=1;ctxD.beginPath();ctxD.moveTo(DW/2,0);ctxD.lineTo(DW/2,DH);ctxD.stroke();ctxD.beginPath();ctxD.moveTo(0,DH*.65);ctxD.lineTo(DW,DH*.65);ctxD.stroke();ctxD.restore();
+    // Brackets
+    const bx1=DW*.08,bx2=DW*.92,by1=sy(roiY)+2,by2=DH-52,cs=18;
+    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.5)';ctxD.lineWidth=2;
+    [[bx1,by1,1,1],[bx2,by1,-1,1],[bx1,by2,1,-1],[bx2,by2,-1,-1]].forEach(([x,y,dx,dy])=>{ctxD.beginPath();ctxD.moveTo(x,y+dy*cs);ctxD.lineTo(x,y);ctxD.lineTo(x+dx*cs,y);ctxD.stroke();});ctxD.restore();
+    // Scanline
+    const sc=(Date.now()%3000)/3000*DH,sg=ctxD.createLinearGradient(0,sc-4,0,sc+4);sg.addColorStop(0,'transparent');sg.addColorStop(.5,'rgba(0,200,255,0.06)');sg.addColorStop(1,'transparent');ctxD.fillStyle=sg;ctxD.fillRect(0,sc-4,DW,8);
+    // Nozzle
+    if(sprayActive){const nx=DW/2,ny=DH*.67;ctxD.save();ctxD.beginPath();ctxD.arc(nx,ny,14,0,Math.PI*2);ctxD.strokeStyle='rgba(0,255,136,0.85)';ctxD.lineWidth=2;ctxD.shadowColor='rgba(0,255,136,0.6)';ctxD.shadowBlur=14;ctxD.stroke();ctxD.beginPath();ctxD.arc(nx,ny,5,0,Math.PI*2);ctxD.fillStyle='rgba(0,255,136,0.9)';ctxD.fill();ctxD.restore();}
+    // Offset
+    const refX=smoothX!==null?smoothX:(lines.length?(lines[0].x1+lines[0].x2)/2:null);
+    const latOff=refX!==null?Math.round((refX-PW/2)/PW*300):0;
+    // UI
+    const pill=document.getElementById('detPill');pill.className='det-pill '+(detected?'found':'lost');document.getElementById('detTxt').textContent=detected?'ERKANNT ('+lines.length+')':'KEINE LINIE';
+    document.getElementById('confFill').style.width=conf+'%';document.getElementById('confPct').textContent=conf+'%';
+    document.getElementById('hFps').textContent=fps;document.getElementById('hT').textContent=procTime;document.getElementById('hF').textContent=frameCount;
+    if(refX!==null){const op=Math.max(5,Math.min(95,50+(latOff/300)*50)),w=Math.abs(latOff)>40;document.getElementById('offDot').style.left=op+'%';document.getElementById('offDot').className='off-dot'+(w?' w':'');document.getElementById('offVal').textContent=(latOff>=0?'+':'')+latOff+' mm';document.getElementById('offVal').className='off-val'+(w?' w':'');}else{document.getElementById('offVal').textContent='-- mm';}
+    const rate=frameCount?Math.round(hitCount/frameCount*100):0,avgC=hitCount?Math.round(totalConf/hitCount):0;
+    document.getElementById('dFr').textContent=frameCount;document.getElementById('dRate').textContent=rate+'%';document.getElementById('dConf').textContent=avgC+'%';document.getElementById('dProc').textContent=procTime+' ms';document.getElementById('dLn').textContent=totalLines;document.getElementById('dFps').textContent=fps;
+    document.getElementById('qOff').textContent=refX!==null?(latOff>=0?'+':'')+latOff+' mm':'--';document.getElementById('qOffB').className='qb '+(Math.abs(latOff)<40?'ok':'w');document.getElementById('qOffB').textContent=Math.abs(latOff)<40?'OK':'WARN';
+    document.getElementById('qCnt').textContent=lines.length||'--';document.getElementById('qStr').textContent=lines.length?Math.round(lines[0].len)+' px':'--';document.getElementById('qLast').textContent=lastHit;
+    animId=requestAnimationFrame(frame);
   }
-
-  animId = requestAnimationFrame(processFrame);
+  animId=requestAnimationFrame(frame);
 }
 
-// ── Simulation Fallback (no camera) ──────────────
-let simTick = 0;
-function startSimMode() {
-  setInterval(() => {
-    simTick++;
-    const c = Math.round(70 + Math.random()*20);
-    document.getElementById('confFill').style.width = c+'%';
-    document.getElementById('confPct').textContent = c+'%';
-    const off = Math.round((Math.random()-0.5)*60);
-    const op = Math.max(5,Math.min(95,50+(off/100)*50));
-    document.getElementById('offDot').style.left=op+'%';
-    document.getElementById('offVal').textContent=(off>=0?'+':'')+off+' mm';
-    const pill=document.getElementById('detectPill');
-    pill.className='detect-pill found';
-    document.getElementById('detectTxt').textContent='SIMULATION';
-    document.getElementById('hFps').textContent=Math.floor(25+Math.random()*5);
-    document.getElementById('hProc').textContent=Math.floor(12+Math.random()*8);
-    document.getElementById('hFrame').textContent=simTick;
-    document.getElementById('dRate').textContent='-- %';
-    document.getElementById('dConf').textContent=c+'%';
-  },500);
-}
+let simT=0;
+function startSimLoop(){log('Simulation aktiv','w');setInterval(()=>{simT++;const c=Math.round(65+Math.random()*25);document.getElementById('confFill').style.width=c+'%';document.getElementById('confPct').textContent=c+'%';const off=Math.round((Math.random()-.5)*80),op=Math.max(5,Math.min(95,50+(off/150)*50));document.getElementById('offDot').style.left=op+'%';document.getElementById('offVal').textContent=(off>=0?'+':'')+off+' mm';document.getElementById('detPill').className='det-pill found';document.getElementById('detTxt').textContent='SIMULATION';document.getElementById('hFps').textContent=Math.floor(24+Math.random()*6);document.getElementById('hT').textContent=Math.floor(8+Math.random()*6);document.getElementById('hF').textContent=simT;},500);}
 
-// ── Spray ─────────────────────────────────────────
-function toggleSpray() {
-  if (emergency) return;
-  sprayActive = !sprayActive;
-  document.getElementById('sprayIco').textContent = sprayActive ? '⏹' : '▶';
-  document.getElementById('sprayLbl').textContent = sprayActive ? 'STOPP SPRÜHEN' : 'SPRÜHEN';
-  document.getElementById('sprayBtn').classList.toggle('active', sprayActive);
-  log(sprayActive ? 'SPRÜHEN aktiviert' : 'SPRÜHEN gestoppt', sprayActive?'ok':'i');
-}
+function toggleSpray(){if(emergency)return;sprayActive=!sprayActive;document.getElementById('sprayIco').textContent=sprayActive?'⏹':'▶';document.getElementById('sprayLbl').textContent=sprayActive?'STOPP SPRUEHEN':'SPRUEHEN';document.getElementById('sprayBtn').classList.toggle('active',sprayActive);log(sprayActive?'SPRUEHEN aktiviert':'SPRUEHEN gestoppt',sprayActive?'ok':'i');}
+function setMode(el){document.querySelectorAll('.mbtn').forEach(b=>b.classList.remove('active'));el.classList.add('active');log('Modus: '+el.textContent.trim(),'i');}
+function triggerEmg(){emergency=!emergency;document.getElementById('emg').classList.toggle('show',emergency);document.getElementById('notausBtn').textContent=emergency?'NOT-AUS ZURUECKSETZEN':'NOT-AUS';if(emergency&&sprayActive)toggleSpray();log(emergency?'NOT-AUS AKTIVIERT!':'NOT-AUS zurueckgesetzt',emergency?'w':'ok');}
 
-// ── Mode ──────────────────────────────────────────
-function setMode(m, el) {
-  document.querySelectorAll('.mbtn').forEach(b=>b.classList.remove('active'));
-  el.classList.add('active');
-  log('Modus: '+m.toUpperCase(), 'i');
-}
+function log(msg,type){const t=new Date().toLocaleTimeString('de-AT',{hour12:false}),l=document.getElementById('logList'),e=document.createElement('div');e.className='le';e.innerHTML='<span class="lt">'+t+'</span><span class="lm '+(type||'i')+'">'+msg+'</span>';l.appendChild(e);l.scrollTop=l.scrollHeight;}
 
-// ── Emergency ─────────────────────────────────────
-function triggerEmg() {
-  emergency = !emergency;
-  document.getElementById('emg').classList.toggle('show', emergency);
-  document.getElementById('notausBtn').textContent = emergency ? '↩ NOT-AUS ZURÜCKSETZEN' : '⬡ NOT-AUS';
-  if (emergency && sprayActive) toggleSpray();
-  log(emergency?'NOT-AUS AKTIVIERT!':'NOT-AUS zurückgesetzt', emergency?'w':'ok');
-}
-
-// ── Log ───────────────────────────────────────────
-function log(msg, type='i') {
-  const t = new Date().toLocaleTimeString('de-AT',{hour12:false});
-  const list = document.getElementById('logList');
-  const e = document.createElement('div');
-  e.className = 'le';
-  e.innerHTML = `<span class="lt">${t}</span><span class="lm ${type}">${msg}</span>`;
-  list.appendChild(e);
-  list.scrollTop = list.scrollHeight;
-}
-
-// ── Init log ──────────────────────────────────────
-log('STRASSE Mobile CV v4.0 gestartet', 'ok');
-log('OpenCV.js wird initialisiert...', 'i');
+log('STRASSE CV v5.0 — Pure JS Engine','ok');
+log('Keine externen Abhaengigkeiten — sofort bereit','ok');
+log('Pipeline: Graustufen + CLAHE + Canny + Hough','i');
 </script>
 </body>
 </html>
