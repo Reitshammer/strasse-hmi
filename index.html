@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>STRASSE — Live CV v2</title>
+<title>STRASSE — Live CV</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;500;600&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
@@ -165,9 +165,9 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
 <div class="emg" id="emg"><div class="emg-txt">NOT-AUS<br>AKTIV</div></div>
 <div class="app">
   <div class="topbar">
-    <div class="logo">STRASSE<small>CV v2 DUAL-LANE</small></div>
+    <div class="logo">STRASSE<small>CV LIVE</small></div>
     <div class="sep"></div>
-    <div class="badge"><div class="dot"></div><span>DUAL-LANE AKTIV</span></div>
+    <div class="badge"><div class="dot"></div><span>CV BEREIT</span></div>
     <div style="width:8px;"></div>
     <div class="clock" id="clock">--:--</div>
   </div>
@@ -191,7 +191,7 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
     </div>
 
     <div class="hud-tl">FPS <span id="hFps">--</span><br>RES <span id="hRes">--</span><br>CAM <span id="hCam">--</span></div>
-    <div class="hud-tr">CLAHE <span id="hC" style="color:var(--ac2)">ON</span><br>CANNY <span style="color:var(--ac2)">ON</span><br>DUAL-LANE <span id="hDL" style="color:var(--ac2)">ON</span></div>
+    <div class="hud-tr">CLAHE <span id="hC" style="color:var(--ac2)">ON</span><br>CANNY <span style="color:var(--ac2)">ON</span><br>ROI <span id="hR" style="color:var(--ac2)">ON</span></div>
     <div class="hud-bl"><div class="det-pill lost" id="detPill"><div class="dp"></div><span id="detTxt">WARTE...</span></div></div>
     <div class="hud-bc"><div class="conf-pill"><span class="cl">KONF</span><div class="ctrack"><div class="cfill" id="confFill" style="width:0%"></div></div><span class="cpct" id="confPct">--%</span></div></div>
     <div class="hud-br">T <span id="hT">--</span>ms<br>F <span id="hF">0</span></div>
@@ -238,7 +238,6 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
       <div class="plbl">Bildverarbeitung</div>
       <div class="trow"><span class="tlbl">CLAHE Kontrastverbesserung</span><label class="tog"><input type="checkbox" checked id="togClahe" onchange="updateP()"><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
       <div class="trow"><span class="tlbl">ROI (untere Bildhälfte)</span><label class="tog"><input type="checkbox" checked id="togRoi" onchange="updateP()"><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
-      <div class="trow"><span class="tlbl">Winkelfilter (Bankett-Unterdrückung)</span><label class="tog"><input type="checkbox" checked id="togAngle" onchange="updateP()"><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
       <div class="trow"><span class="tlbl">Linienstabilisierung</span><label class="tog"><input type="checkbox" checked id="togSmooth"><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
       <div class="srow"><div class="shdr"><span class="sname">CANNY THRESHOLD</span><span class="sval" id="sv1">50</span></div><input type="range" min="10" max="120" value="50" oninput="document.getElementById('sv1').textContent=this.value;p.cannyLow=+this.value;p.cannyHigh=+this.value*2.5|0"></div>
       <div class="srow"><div class="shdr"><span class="sname">HOUGH EMPFINDLICHKEIT</span><span class="sval" id="sv2">40</span></div><input type="range" min="5" max="100" value="40" oninput="document.getElementById('sv2').textContent=this.value;p.hough=+this.value"></div>
@@ -299,17 +298,10 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
   </div>
 </div>
 <script>
-const p={cannyLow:45,cannyHigh:110,hough:28,roiH:0.58,useClahe:true,useRoi:true,angleFilter:true};
+const p={cannyLow:50,cannyHigh:120,hough:40,roiH:0.60,useClahe:true,useRoi:true};
 let camStream=null,facing='environment',animId=null,sprayActive=false,emergency=false;
-let frameCount=0,hitCount=0,totalConf=0,totalLines=0,fpsCount=0,fps=0,fpsTimer=0,lastHit='--';
-const SMOOTH=8;
-// ── Dual-lane exponential tracker ─────────────────────────────────────
-const ALPHA=0.22;
-const laneL={x:null,y1:null,y2:null,conf:0,missing:0};
-const laneR={x:null,y1:null,y2:null,conf:0,missing:0};
-const MAX_MISSING=14;
-let centerHistory=[];
-// ── Perspective warp helpers ───────────────────────────────────────────
+let frameCount=0,hitCount=0,totalConf=0,totalLines=0,lineHistory=[],fpsCount=0,fps=0,fpsTimer=0,lastHit='--';
+const SMOOTH=6;
 
 // ════════════════════════════════════════════
 //  GPS ENGINE
@@ -507,217 +499,241 @@ async function startCam(){
 }
 async function flipCam(){facing=facing==='environment'?'user':'environment';if(animId){cancelAnimationFrame(animId);animId=null;}await startCam();}
 function updateP(){
-  p.useClahe=document.getElementById('togClahe').checked;
-  p.useRoi=document.getElementById('togRoi').checked;
-  p.angleFilter=document.getElementById('togAngle')?.checked!==false;
-  document.getElementById('hC').textContent=p.useClahe?'ON':'OFF';
-  document.getElementById('hC').style.color=p.useClahe?'var(--ac2)':'var(--warn)';
-  document.getElementById('hDL').textContent=p.angleFilter?'ON':'OFF';
-  document.getElementById('hDL').style.color=p.angleFilter?'var(--ac2)':'var(--warn)';
-  // Reset dual-lane tracker when params change
-  laneL.x=null;laneL.conf=0;laneL.missing=0;
-  laneR.x=null;laneR.conf=0;laneR.missing=0;
-  centerHistory.length=0;
+  p.useClahe=document.getElementById('togClahe').checked;p.useRoi=document.getElementById('togRoi').checked;
+  document.getElementById('hC').textContent=p.useClahe?'ON':'OFF';document.getElementById('hC').style.color=p.useClahe?'var(--ac2)':'var(--tx3)';
+  document.getElementById('hR').textContent=p.useRoi?'ON':'OFF';document.getElementById('hR').style.color=p.useRoi?'var(--ac2)':'var(--tx3)';
 }
 
 // Gaussian 5x5
 const G5=[2,4,5,4,2,4,9,12,9,4,5,12,15,12,5,4,9,12,9,4,2,4,5,4,2],G5S=159;
-// ══════════════════════════════════════════════════════════════════════
-//  STRASSE CV v3 — Web Worker Architecture
-//  Worker läuft in eigenem Thread → UI blockiert NIE
-//  Draw-Loop läuft immer bei 60fps mit letztem Worker-Ergebnis
-// ══════════════════════════════════════════════════════════════════════
-
-const G5=[2,4,5,4,2,4,9,12,9,4,5,12,15,12,5,4,9,12,9,4,2,4,5,4,2],G5S=159;
-
-const WORKER_CODE=`
-const G5=[2,4,5,4,2,4,9,12,9,4,5,12,15,12,5,4,9,12,9,4,2,4,5,4,2],G5S=159;
 function gaussBlur(g,w,h){const o=new Uint8Array(g.length);for(let y=2;y<h-2;y++){for(let x=2;x<w-2;x++){let s=0;for(let ky=-2;ky<=2;ky++)for(let kx=-2;kx<=2;kx++)s+=g[(y+ky)*w+(x+kx)]*G5[(ky+2)*5+(kx+2)];o[y*w+x]=s/G5S|0;}}return o;}
-function clahe(g,w,h){const TW=8,TH=8,tw=Math.ceil(w/TW),th=Math.ceil(h/TH),out=new Uint8Array(w*h);for(let ty=0;ty<TH;ty++){for(let tx=0;tx<TW;tx++){const x0=tx*tw,y0=ty*th,x1=Math.min(x0+tw,w),y1=Math.min(y0+th,h);const hist=new Int32Array(256);for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)hist[g[y*w+x]]++;const n=(x1-x0)*(y1-y0),cl=Math.max(1,Math.round(n*0.03));let excess=0;for(let i=0;i<256;i++){if(hist[i]>cl){excess+=hist[i]-cl;hist[i]=cl;}}const add=excess/256|0;for(let i=0;i<256;i++)hist[i]+=add;const cdf=new Int32Array(256);cdf[0]=hist[0];for(let i=1;i<256;i++)cdf[i]=cdf[i-1]+hist[i];const s=255/(cdf[255]||1);for(let y=y0;y<y1;y++)for(let x=x0;x<x1;x++)out[y*w+x]=Math.min(255,cdf[g[y*w+x]]*s|0);}}return out;}
+
+function clahe(g,w,h){
+  const o=new Uint8Array(g.length),TW=48,TH=48;
+  for(let ty=0;ty<h;ty+=TH){for(let tx=0;tx<w;tx+=TW){
+    const tw=Math.min(TW,w-tx),th=Math.min(TH,h-ty);
+    const hist=new Int32Array(256);
+    for(let y=ty;y<ty+th;y++)for(let x=tx;x<tx+tw;x++)hist[g[y*w+x]]++;
+    const lim=Math.floor(2.5*tw*th/256);let ex=0;
+    for(let i=0;i<256;i++){if(hist[i]>lim){ex+=hist[i]-lim;hist[i]=lim;}}
+    const add=ex/256|0;for(let i=0;i<256;i++)hist[i]+=add;
+    const cdf=new Int32Array(256);cdf[0]=hist[0];for(let i=1;i<256;i++)cdf[i]=cdf[i-1]+hist[i];
+    const cmin=cdf.find(v=>v>0)||1,tot=tw*th;
+    for(let y=ty;y<ty+th;y++)for(let x=tx;x<tx+tw;x++)o[y*w+x]=Math.round((cdf[g[y*w+x]]-cmin)/(tot-cmin)*255);
+  }}return o;
+}
+
 function sobel(img,w,h){const mag=new Float32Array(w*h),ang=new Float32Array(w*h);for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){const gx=-img[(y-1)*w+(x-1)]-2*img[y*w+(x-1)]-img[(y+1)*w+(x-1)]+img[(y-1)*w+(x+1)]+2*img[y*w+(x+1)]+img[(y+1)*w+(x+1)];const gy=-img[(y-1)*w+(x-1)]-2*img[(y-1)*w+x]-img[(y-1)*w+(x+1)]+img[(y+1)*w+(x-1)]+2*img[(y+1)*w+x]+img[(y+1)*w+(x+1)];mag[y*w+x]=Math.sqrt(gx*gx+gy*gy);ang[y*w+x]=Math.atan2(gy,gx);}}return{mag,ang};}
+
 function nms(mag,ang,w,h){const o=new Float32Array(w*h);for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){const a=(ang[y*w+x]*180/Math.PI+180)%180;let n1,n2;if(a<22.5||a>=157.5){n1=mag[y*w+(x-1)];n2=mag[y*w+(x+1)];}else if(a<67.5){n1=mag[(y-1)*w+(x+1)];n2=mag[(y+1)*w+(x-1)];}else if(a<112.5){n1=mag[(y-1)*w+x];n2=mag[(y+1)*w+x];}else{n1=mag[(y-1)*w+(x-1)];n2=mag[(y+1)*w+(x+1)];}const m=mag[y*w+x];o[y*w+x]=(m>=n1&&m>=n2)?m:0;}}return o;}
+
 function hysteresis(s,w,h,lo,hi){const o=new Uint8Array(w*h);for(let i=0;i<w*h;i++){if(s[i]>=hi)o[i]=255;else if(s[i]>=lo)o[i]=128;}for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){if(o[y*w+x]===128){const c=o[(y-1)*w+(x-1)]===255||o[(y-1)*w+x]===255||o[(y-1)*w+(x+1)]===255||o[y*w+(x-1)]===255||o[y*w+(x+1)]===255||o[(y+1)*w+(x-1)]===255||o[(y+1)*w+x]===255||o[(y+1)*w+(x+1)]===255;o[y*w+x]=c?255:0;}}return o;}
-function hough(edges,w,h,thresh,minLen,maxGap){const diag=Math.sqrt(w*w+h*h)|0,TS=180,acc=new Int32Array(diag*2*TS);const cosT=new Float32Array(TS),sinT=new Float32Array(TS);for(let t=0;t<TS;t++){cosT[t]=Math.cos(t*Math.PI/180);sinT[t]=Math.sin(t*Math.PI/180);}const pts=[];for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(edges[y*w+x]>0)pts.push(x,y);const step=pts.length>6000?Math.ceil(pts.length/3000):2;for(let i=0;i<pts.length;i+=step){const x=pts[i],y=pts[i+1];if(x===undefined)continue;for(let t=0;t<TS;t++){const r=(x*cosT[t]+y*sinT[t])|0,ri=r+diag;if(ri>=0&&ri<diag*2)acc[ri*TS+t]++;}}const vis=new Uint8Array(diag*2*TS),peaks=[];for(let ri=0;ri<diag*2;ri++)for(let t=0;t<TS;t++){if(acc[ri*TS+t]>=thresh&&!vis[ri*TS+t]){peaks.push([ri-diag,t,acc[ri*TS+t]]);for(let dr=-4;dr<=4;dr++)for(let dt=-4;dt<=4;dt++){const nr=ri+dr,nt=((t+dt)%TS+TS)%TS;if(nr>=0&&nr<diag*2)vis[nr*TS+nt]=1;}}}peaks.sort((a,b)=>b[2]-a[2]);const lines=[];for(const[rho,t]of peaks.slice(0,12)){const ct=cosT[t],st=sinT[t];const proj=[];for(let i=0;i<pts.length;i+=step){const x=pts[i],y=pts[i+1];if(x===undefined)continue;const r2=(x*ct+y*st)|0;if(Math.abs(r2-rho)<=2)proj.push([(-x*st+y*ct)|0,x,y]);}proj.sort((a,b)=>a[0]-b[0]);let cur=null;for(const[pr,x,y]of proj){if(!cur)cur={s:[x,y],e:[x,y],pr};else if(pr-cur.pr<=maxGap){cur.e=[x,y];cur.pr=pr;}else{const dx=cur.e[0]-cur.s[0],dy=cur.e[1]-cur.s[1],len=Math.sqrt(dx*dx+dy*dy);if(len>=minLen)lines.push({x1:cur.s[0],y1:cur.s[1],x2:cur.e[0],y2:cur.e[1],len});cur={s:[x,y],e:[x,y],pr};}}if(cur){const dx=cur.e[0]-cur.s[0],dy=cur.e[1]-cur.s[1],len=Math.sqrt(dx*dx+dy*dy);if(len>=minLen)lines.push({x1:cur.s[0],y1:cur.s[1],x2:cur.e[0],y2:cur.e[1],len});}}return lines;}
-function classify(rawLines,PW,PH,angleFilter){const mid=PW/2,left=[],right=[];rawLines.forEach(l=>{const dx=l.x2-l.x1,dy=l.y2-l.y1;if(Math.abs(dx)<2)return;const angle=Math.abs(Math.atan2(Math.abs(dy),Math.abs(dx))*180/Math.PI);if(angle<14||angle>82)return;const slope=dy/dx,xBot=l.x1+(PH-l.y1)/slope;if(angleFilter){if(slope<0&&xBot<mid+60)left.push({...l,slope,xBot});else if(slope>0&&xBot>mid-60)right.push({...l,slope,xBot});}else{if(xBot<mid)left.push({...l,slope,xBot});else right.push({...l,slope,xBot});}});return{bestL:left.sort((a,b)=>b.len-a.len)[0]||null,bestR:right.sort((a,b)=>b.len-a.len)[0]||null,allL:left,allR:right};}
-self.onmessage=function(e){
-  const{px,PW,PH,cfg}=e.data,t0=performance.now();
-  const gray=new Uint8Array(PW*PH);
-  for(let i=0;i<PW*PH;i++)gray[i]=(px[i*4]*77+px[i*4+1]*150+px[i*4+2]*29)>>8;
-  const roiY=cfg.useRoi?Math.floor(PH*(1-cfg.roiH)):0;
-  let work=cfg.useClahe?clahe(gray,PW,PH):gray;
-  const blurred=gaussBlur(work,PW,PH);
-  const{mag,ang}=sobel(blurred,PW,PH);
-  const n=nms(mag,ang,PW,PH);
-  const edges=hysteresis(n,PW,PH,cfg.cannyLow,cfg.cannyHigh);
-  if(cfg.useRoi){
-    for(let y=0;y<roiY;y++)for(let x=0;x<PW;x++)edges[y*PW+x]=0;
-    for(let y=roiY;y<roiY+20;y++){const fade=Math.floor((y-roiY)/20*(PW*0.25));for(let x=0;x<fade;x++)edges[y*PW+x]=0;for(let x=PW-fade;x<PW;x++)edges[y*PW+x]=0;}
+
+function hough(edges,w,h,thresh,minLen,maxGap){
+  const diag=Math.sqrt(w*w+h*h)|0,TS=180,acc=new Int32Array(diag*2*TS);
+  const cosT=new Float32Array(TS),sinT=new Float32Array(TS);
+  for(let t=0;t<TS;t++){cosT[t]=Math.cos(t*Math.PI/180);sinT[t]=Math.sin(t*Math.PI/180);}
+  const pts=[];for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(edges[y*w+x]>0)pts.push(x,y);
+  for(let i=0;i<pts.length;i+=2){const x=pts[i],y=pts[i+1];for(let t=0;t<TS;t++){const r=(x*cosT[t]+y*sinT[t])|0,ri=r+diag;if(ri>=0&&ri<diag*2)acc[ri*TS+t]++;}}
+  const vis=new Uint8Array(diag*2*TS),peaks=[];
+  for(let ri=0;ri<diag*2;ri++)for(let t=0;t<TS;t++){if(acc[ri*TS+t]>=thresh&&!vis[ri*TS+t]){peaks.push([ri-diag,t,acc[ri*TS+t]]);for(let dr=-4;dr<=4;dr++)for(let dt=-4;dt<=4;dt++){const nr=ri+dr,nt=((t+dt)%TS+TS)%TS;if(nr>=0&&nr<diag*2)vis[nr*TS+nt]=1;}}}
+  peaks.sort((a,b)=>b[2]-a[2]);
+  const lines=[];
+  for(const[rho,t]of peaks.slice(0,10)){
+    const ct=cosT[t],st=sinT[t];
+    const proj=[];
+    for(let i=0;i<pts.length;i+=2){const x=pts[i],y=pts[i+1];const r2=(x*ct+y*st)|0;if(Math.abs(r2-rho)<=2)proj.push([(-x*st+y*ct)|0,x,y]);}
+    proj.sort((a,b)=>a[0]-b[0]);
+    let cur=null;
+    for(const[pr,x,y]of proj){if(!cur)cur={s:[x,y],e:[x,y],pr};else if(pr-cur.pr<=maxGap){cur.e=[x,y];cur.pr=pr;}else{const dx=cur.e[0]-cur.s[0],dy=cur.e[1]-cur.s[1],len=Math.sqrt(dx*dx+dy*dy);if(len>=minLen)lines.push({x1:cur.s[0],y1:cur.s[1],x2:cur.e[0],y2:cur.e[1],len});cur={s:[x,y],e:[x,y],pr};}}
+    if(cur){const dx=cur.e[0]-cur.s[0],dy=cur.e[1]-cur.s[1],len=Math.sqrt(dx*dx+dy*dy);if(len>=minLen)lines.push({x1:cur.s[0],y1:cur.s[1],x2:cur.e[0],y2:cur.e[1],len});}
   }
-  const raw=hough(edges,PW,PH,cfg.hough,15,10);
-  const{bestL,bestR,allL,allR}=classify(raw,PW,PH,cfg.angleFilter);
-  self.postMessage({bestL,bestR,allL,allR,rawCount:raw.length,procMs:Math.round(performance.now()-t0),roiY});
-};
-`;
-
-// ── Worker state ──────────────────────────────────────────────────────
-let cvWorker=null, workerReady=true, lastCV=null;
-const PW=320, PH=240;
-const ALPHA=0.22, MAX_MISSING=14, SMOOTH=8;
-// Lane trackers (persistent across frames)
-const lL={x:null,conf:0,missing:0};
-const lR={x:null,conf:0,missing:0};
-let cHist=[];
-
-function launchWorker(){
-  if(cvWorker)cvWorker.terminate();
-  const blob=new Blob([WORKER_CODE],{type:'application/javascript'});
-  cvWorker=new Worker(URL.createObjectURL(blob));
-  cvWorker.onmessage=e=>{lastCV=e.data; workerReady=true;};
-  cvWorker.onerror=e=>{workerReady=true;};
+  return lines;
 }
-
-function updateTracker(tr,cand){
-  if(cand){
-    const xB=cand.x1+(PH-cand.y1)/cand.slope;
-    tr.x=tr.x===null?xB:tr.x*(1-ALPHA)+xB*ALPHA;
-    tr.conf=Math.min(99,tr.conf+7); tr.missing=0;
-  } else {
-    tr.missing++; tr.conf=Math.max(0,tr.conf-4);
-    if(tr.missing>MAX_MISSING){tr.x=null;tr.conf=0;}
-  }
-}
-
-// ── Canvas resize (only when needed, never inside frame loop) ─────────
-let DW=0,DH=0,dispEl=null;
-function onResize(){
-  if(!dispEl)return;
-  const nw=dispEl.offsetWidth*(window.devicePixelRatio||1)|0;
-  const nh=dispEl.offsetHeight*(window.devicePixelRatio||1)|0;
-  if(nw!==DW||nh!==DH){dispEl.width=nw;dispEl.height=nh;DW=nw;DH=nh;}
-}
-window.addEventListener('resize',()=>onResize());
 
 function startLoop(){
   if(animId)cancelAnimationFrame(animId);
-  launchWorker();
-  log('CV-Pipeline v3 — Worker-Thread aktiv','ok');
-  log('Draw-Loop 60fps unabhängig von CV-Verarbeitung','ok');
+  log('CV-Pipeline v2 gestartet','ok');
+  log('Winkelfilter + Dual-Lane-Tracker aktiv','ok');
+  const vid=document.getElementById('vid'),proc=document.getElementById('proc'),disp=document.getElementById('disp');
+  const ctxP=proc.getContext('2d',{willReadFrequently:true}),ctxD=disp.getContext('2d');
+  const PW=320,PH=220;proc.width=PW;proc.height=PH;
 
-  const vid=document.getElementById('vid');
-  const proc=document.getElementById('proc');
-  dispEl=document.getElementById('disp');
-  const ctxP=proc.getContext('2d',{willReadFrequently:true});
-  const ctxD=dispEl.getContext('2d');
-  proc.width=PW; proc.height=PH;
-  onResize();
+  // Canvas-Größe EINMALIG setzen, dann nur bei Resize
+  let DW=0,DH=0;
+  function resizeCv(){
+    const nw=(disp.offsetWidth*(window.devicePixelRatio||1))|0;
+    const nh=(disp.offsetHeight*(window.devicePixelRatio||1))|0;
+    if(nw!==DW||nh!==DH){disp.width=nw;disp.height=nh;DW=nw;DH=nh;}
+  }
+  resizeCv();
+  const _rh=()=>resizeCv();
+  window.addEventListener('resize',_rh);
+
+  // Dual-Lane-Tracker — lokal, kein Global-Konflikt
+  const WA=0.25,WM=12;
+  let trL={x:null,conf:0,mis:0}, trR={x:null,conf:0,mis:0};
+  let cHist=[], cSMOOTH=8;
+
+  function trackLane(tr,xBot,found){
+    if(found){
+      tr.x=tr.x===null?xBot:tr.x*(1-WA)+xBot*WA;
+      tr.conf=Math.min(99,tr.conf+8); tr.mis=0;
+    } else {
+      tr.mis++; tr.conf=Math.max(0,tr.conf-5);
+      if(tr.mis>WM){tr.x=null;tr.conf=0;}
+    }
+  }
+
+  function classifyLines(rawLines){
+    const mid=PW/2, left=[], right=[];
+    rawLines.forEach(l=>{
+      const dx=l.x2-l.x1, dy=l.y2-l.y1;
+      if(Math.abs(dx)<2)return;
+      const ang=Math.abs(Math.atan2(Math.abs(dy),Math.abs(dx))*180/Math.PI);
+      if(ang<14||ang>82)return;  // Bankett/Horizont rausfiltern
+      const slope=dy/dx;
+      const xBot=l.x1+(PH-l.y1)/slope;
+      if(slope<0&&xBot<mid+60) left.push({...l,slope,xBot});
+      else if(slope>0&&xBot>mid-60) right.push({...l,slope,xBot});
+    });
+    left.sort((a,b)=>b.len-a.len);
+    right.sort((a,b)=>b.len-a.len);
+    return{bestL:left[0]||null,bestR:right[0]||null,allL:left,allR:right};
+  }
 
   function frame(){
     if(!vid.videoWidth||vid.readyState<2){animId=requestAnimationFrame(frame);return;}
-    onResize(); // no-op if size unchanged
+    resizeCv();  // no-op wenn Größe unverändert
+    const t0=performance.now();
+    ctxP.drawImage(vid,0,0,PW,PH);
+    const id=ctxP.getImageData(0,0,PW,PH),px=id.data;
+    let gray=new Uint8Array(PW*PH);
+    for(let i=0;i<PW*PH;i++)gray[i]=(px[i*4]*77+px[i*4+1]*150+px[i*4+2]*29)>>8;
+    let roiY=0;
+    if(p.useRoi){roiY=Math.floor(PH*(1-p.roiH));}
+    let work=p.useClahe?clahe(gray,PW,PH):gray;
+    const blurred=gaussBlur(work,PW,PH);
+    const{mag,ang}=sobel(blurred,PW,PH);
+    const n=nms(mag,ang,PW,PH);
+    const edges=hysteresis(n,PW,PH,p.cannyLow,p.cannyHigh);
+    if(p.useRoi){
+      for(let y=0;y<roiY;y++)for(let x=0;x<PW;x++)edges[y*PW+x]=0;
+      // Trapez-Ecken abschneiden
+      for(let y=roiY;y<roiY+18;y++){
+        const fade=Math.floor((y-roiY)/18*(PW*0.22));
+        for(let x=0;x<fade;x++)edges[y*PW+x]=0;
+        for(let x=PW-fade;x<PW;x++)edges[y*PW+x]=0;
+      }
+    }
+    const rawLines=hough(edges,PW,PH,p.hough,12,8);
+    const{bestL,bestR,allL,allR}=classifyLines(rawLines);
 
-    // ── Send frame to worker if idle ───────────────────────────────
-    if(workerReady){
-      workerReady=false;
-      ctxP.drawImage(vid,0,0,PW,PH);
-      const px=ctxP.getImageData(0,0,PW,PH).data;
-      // Structured clone — fast enough, avoids detach issues on mobile
-      cvWorker.postMessage({px,PW,PH,cfg:{...p,angleFilter:p.angleFilter!==false}});
+    // Tracker updaten
+    trackLane(trL, bestL?bestL.xBot:null, !!bestL);
+    trackLane(trR, bestR?bestR.xBot:null, !!bestR);
+
+    const procTime=Math.round(performance.now()-t0);
+    const detected=trL.x!==null||trR.x!==null;
+    const both=trL.x!==null&&trR.x!==null;
+
+    // Smoothed centre
+    let smCx=null;
+    if(detected){
+      const cx=both?(trL.x+trR.x)/2:trL.x!==null?trL.x+40:trR.x-40;
+      cHist.push(cx); if(cHist.length>cSMOOTH)cHist.shift();
+      smCx=cHist.reduce((a,b)=>a+b,0)/cHist.length;
     }
 
-    // ── Draw at 60fps using last available CV result ───────────────
-    if(!lastCV){animId=requestAnimationFrame(frame);return;}
-    const{bestL,bestR,allL,allR,rawCount,procMs,roiY}=lastCV;
-
-    updateTracker(lL,bestL);
-    updateTracker(lR,bestR);
+    const conf=Math.round((trL.conf+trR.conf)/2);
+    frameCount++;
+    if(detected){hitCount++;totalConf+=conf;totalLines+=rawLines.length;lastHit=new Date().toLocaleTimeString('de-AT',{hour12:false});}
+    fpsCount++;const now2=performance.now();if(now2-fpsTimer>=1000){fps=fpsCount;fpsCount=0;fpsTimer=now2;}
 
     const sx=v=>v/PW*DW, sy=v=>v/PH*DH;
     ctxD.clearRect(0,0,DW,DH);
 
-    // ROI overlay
+    // ROI shading
     if(p.useRoi){
-      ctxD.fillStyle='rgba(0,200,255,0.018)';
+      ctxD.fillStyle='rgba(0,200,255,0.022)';
       ctxD.fillRect(0,sy(roiY),DW,DH-sy(roiY));
-      ctxD.strokeStyle='rgba(0,200,255,0.18)';ctxD.lineWidth=1;ctxD.setLineDash([5,7]);
+      ctxD.strokeStyle='rgba(0,200,255,0.2)';ctxD.lineWidth=1;ctxD.setLineDash([6,6]);
       ctxD.beginPath();ctxD.moveTo(0,sy(roiY));ctxD.lineTo(DW,sy(roiY));ctxD.stroke();
       ctxD.setLineDash([]);
     }
-    // Perspective trapezoid guides
-    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.15)';ctxD.lineWidth=1;ctxD.setLineDash([4,8]);
+
+    // Perspektiv-Hilfslinien
+    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.12)';ctxD.lineWidth=1;ctxD.setLineDash([4,9]);
     ctxD.beginPath();
-    ctxD.moveTo(DW*0.42,sy(roiY));ctxD.lineTo(DW*0.05,DH*0.97);
-    ctxD.moveTo(DW*0.58,sy(roiY));ctxD.lineTo(DW*0.95,DH*0.97);
+    ctxD.moveTo(DW*0.42,sy(roiY));ctxD.lineTo(DW*0.05,DH*0.98);
+    ctxD.moveTo(DW*0.58,sy(roiY));ctxD.lineTo(DW*0.95,DH*0.98);
     ctxD.stroke();ctxD.setLineDash([]);ctxD.restore();
 
-    // Secondary raw lines
-    [...(allL||[]),...(allR||[])].forEach(l=>{
-      ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.10)';ctxD.lineWidth=1;
+    // Alle erkannten Rohlinien (dim)
+    [...allL,...allR].forEach(l=>{
+      ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.13)';ctxD.lineWidth=1;
       ctxD.beginPath();ctxD.moveTo(sx(l.x1),sy(l.y1));ctxD.lineTo(sx(l.x2),sy(l.y2));ctxD.stroke();ctxD.restore();
     });
 
-    // Lane fill between tracked lines
-    if(lL.x!==null&&lR.x!==null){
+    // Spur-Füllung
+    if(both){
       ctxD.fillStyle='rgba(0,255,136,0.04)';
       ctxD.beginPath();
-      ctxD.moveTo(sx(lL.x),sy(roiY)+2);ctxD.lineTo(sx(lR.x),sy(roiY)+2);
-      ctxD.lineTo(sx(lR.x),DH*0.97);ctxD.lineTo(sx(lL.x),DH*0.97);
+      ctxD.moveTo(sx(trL.x),sy(roiY)+2);ctxD.lineTo(sx(trR.x),sy(roiY)+2);
+      ctxD.lineTo(sx(trR.x),DH*0.98);ctxD.lineTo(sx(trL.x),DH*0.98);
       ctxD.closePath();ctxD.fill();
     }
 
-    // Centre line + smooth centre X
-    let smCx=null;
-    if(lL.x!==null||lR.x!==null){
-      const cx=lL.x!==null&&lR.x!==null?(lL.x+lR.x)/2:lL.x!==null?lL.x+40:lR.x-40;
-      cHist.push(cx);if(cHist.length>SMOOTH)cHist.shift();
-      smCx=cHist.reduce((a,b)=>a+b,0)/cHist.length;
-      ctxD.save();ctxD.strokeStyle='rgba(255,210,0,0.7)';ctxD.lineWidth=2;
-      ctxD.shadowColor='rgba(255,200,0,0.35)';ctxD.shadowBlur=8;ctxD.setLineDash([8,6]);
-      ctxD.beginPath();ctxD.moveTo(sx(smCx),sy(roiY)+4);ctxD.lineTo(sx(smCx),DH*0.97);
+    // Mittellinie (gelb gestrichelt)
+    if(smCx!==null){
+      ctxD.save();ctxD.strokeStyle='rgba(255,210,0,0.65)';ctxD.lineWidth=2;
+      ctxD.shadowColor='rgba(255,200,0,0.3)';ctxD.shadowBlur=6;ctxD.setLineDash([8,6]);
+      ctxD.beginPath();ctxD.moveTo(sx(smCx),sy(roiY)+4);ctxD.lineTo(sx(smCx),DH*0.98);
       ctxD.stroke();ctxD.setLineDash([]);ctxD.restore();
     }
 
-    // Primary lane lines
-    [[lL,'L','rgba(0,255,136,'],[lR,'R','rgba(0,200,255,']].forEach(([tr,side,col])=>{
+    // Primäre Spurlinien
+    [[trL,'L','0,255,136'],[trR,'R','0,200,255']].forEach(([tr,side,rgb])=>{
       if(tr.x===null||tr.conf<5)return;
-      const a=Math.min(0.95,tr.conf/70);
-      ctxD.save();ctxD.strokeStyle=col+a+')';ctxD.lineWidth=3;
-      ctxD.shadowColor=col+'0.5)';ctxD.shadowBlur=12;
-      ctxD.beginPath();ctxD.moveTo(sx(tr.x)+(side==='L'?-6:6),sy(roiY)+2);
-      ctxD.lineTo(sx(tr.x),DH*0.97);ctxD.stroke();
-      ctxD.fillStyle=col+a+')';ctxD.font="bold 9px 'Share Tech Mono',monospace";
-      ctxD.fillText(side==='L'?'◀ L':'R ▶',sx(tr.x)+(side==='L'?-28:8),sy(roiY)+16);
+      const al=Math.min(0.95,tr.conf/65);
+      ctxD.save();
+      ctxD.strokeStyle=`rgba(${rgb},${al})`;ctxD.lineWidth=3;
+      ctxD.shadowColor=`rgba(${rgb},0.5)`;ctxD.shadowBlur=10;
+      ctxD.beginPath();
+      ctxD.moveTo(sx(tr.x)+(side==='L'?-5:5),sy(roiY)+2);
+      ctxD.lineTo(sx(tr.x),DH*0.98);ctxD.stroke();
+      ctxD.fillStyle=`rgba(${rgb},${al})`;
+      ctxD.font="bold 9px 'Share Tech Mono',monospace";
+      ctxD.fillText(side==='L'?'◀ L':'R ▶',sx(tr.x)+(side==='L'?-28:8),sy(roiY)+15);
       ctxD.restore();
     });
 
     // Crosshair
-    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.09)';ctxD.lineWidth=1;
+    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.11)';ctxD.lineWidth=1;
     ctxD.beginPath();ctxD.moveTo(DW/2,0);ctxD.lineTo(DW/2,DH);ctxD.stroke();
-    ctxD.beginPath();ctxD.moveTo(0,DH*.62);ctxD.lineTo(DW,DH*.62);ctxD.stroke();
-    ctxD.restore();
+    ctxD.beginPath();ctxD.moveTo(0,DH*.65);ctxD.lineTo(DW,DH*.65);ctxD.stroke();ctxD.restore();
 
-    // Corner brackets
-    const bx1=DW*.06,bx2=DW*.94,by1=sy(roiY)+2,by2=DH-50,cs=16;
-    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.42)';ctxD.lineWidth=2;
+    // Brackets
+    const bx1=DW*.08,bx2=DW*.92,by1=sy(roiY)+2,by2=DH-52,cs=18;
+    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.5)';ctxD.lineWidth=2;
     [[bx1,by1,1,1],[bx2,by1,-1,1],[bx1,by2,1,-1],[bx2,by2,-1,-1]].forEach(([x,y,dx,dy])=>{
       ctxD.beginPath();ctxD.moveTo(x,y+dy*cs);ctxD.lineTo(x,y);ctxD.lineTo(x+dx*cs,y);ctxD.stroke();
     });ctxD.restore();
 
-    // Lane badge
-    const det=lL.x!==null||lR.x!==null, both=lL.x!==null&&lR.x!==null;
+    // Spurtyp-Badge
     ctxD.save();ctxD.font="bold 9px 'Share Tech Mono',monospace";
     ctxD.fillStyle=both?'rgba(0,255,136,0.9)':'rgba(255,170,0,0.9)';
-    ctxD.fillText(det?(both?'DUAL LANE':'EINE SPUR'):'—',DW/2-22,sy(roiY)-4);
+    ctxD.fillText(detected?(both?'DUAL LANE':'EINE SPUR'):'—',DW/2-20,sy(roiY)-4);
     ctxD.restore();
 
-    // Scanline effect
-    const sc=(Date.now()%2800)/2800*DH;
-    const sg=ctxD.createLinearGradient(0,sc-4,0,sc+4);
-    sg.addColorStop(0,'transparent');sg.addColorStop(.5,'rgba(0,200,255,0.05)');sg.addColorStop(1,'transparent');
+    // Scanline
+    const sc=(Date.now()%3000)/3000*DH,sg=ctxD.createLinearGradient(0,sc-4,0,sc+4);
+    sg.addColorStop(0,'transparent');sg.addColorStop(.5,'rgba(0,200,255,0.06)');sg.addColorStop(1,'transparent');
     ctxD.fillStyle=sg;ctxD.fillRect(0,sc-4,DW,8);
 
-    // Nozzle indicator
+    // Nozzle
     if(sprayActive){
-      const nx=DW/2,ny=DH*.65;ctxD.save();
+      const nx=DW/2,ny=DH*.67;ctxD.save();
       ctxD.beginPath();ctxD.arc(nx,ny,14,0,Math.PI*2);
       ctxD.strokeStyle='rgba(0,255,136,0.85)';ctxD.lineWidth=2;
       ctxD.shadowColor='rgba(0,255,136,0.6)';ctxD.shadowBlur=14;ctxD.stroke();
@@ -725,47 +741,37 @@ function startLoop(){
       ctxD.fillStyle='rgba(0,255,136,0.9)';ctxD.fill();ctxD.restore();
     }
 
-    // FPS & stats
-    fpsCount++;
-    const now2=performance.now();
-    if(now2-fpsTimer>=1000){fps=fpsCount;fpsCount=0;fpsTimer=now2;}
-    frameCount++;
-    const conf=Math.round((lL.conf+lR.conf)/2);
-    if(det){hitCount++;totalConf+=conf;totalLines+=rawCount;lastHit=new Date().toLocaleTimeString('de-AT',{hour12:false});}
-
-    // Lateral offset
+    // Offset berechnen
     const latOff=smCx!==null?Math.round((smCx-PW/2)/PW*300):0;
-    const offKnown=smCx!==null;
 
-    // ── UI ─────────────────────────────────────────────────────────
+    // UI
     const pill=document.getElementById('detPill');
-    pill.className='det-pill '+(det?'found':'lost');
-    document.getElementById('detTxt').textContent=det?(both?'BEIDE SPUREN ('+rawCount+')':'EINE SPUR ('+rawCount+')'):'KEINE LINIE';
+    pill.className='det-pill '+(detected?'found':'lost');
+    document.getElementById('detTxt').textContent=detected?(both?'BEIDE SPUREN ('+rawLines.length+')':'EINE SPUR ('+rawLines.length+')'):'KEINE LINIE';
     document.getElementById('confFill').style.width=conf+'%';
     document.getElementById('confPct').textContent=conf+'%';
     document.getElementById('hFps').textContent=fps;
-    document.getElementById('hT').textContent=procMs+'ms⚡';
+    document.getElementById('hT').textContent=procTime;
     document.getElementById('hF').textContent=frameCount;
-    if(offKnown){
+    if(smCx!==null){
       const op=Math.max(5,Math.min(95,50+(latOff/300)*50)),w=Math.abs(latOff)>40;
       document.getElementById('offDot').style.left=op+'%';
       document.getElementById('offDot').className='off-dot'+(w?' w':'');
       document.getElementById('offVal').textContent=(latOff>=0?'+':'')+latOff+' mm';
       document.getElementById('offVal').className='off-val'+(w?' w':'');
-    } else {document.getElementById('offVal').textContent='-- mm';}
-    const rate=frameCount?Math.round(hitCount/frameCount*100):0;
-    const avgC=hitCount?Math.round(totalConf/hitCount):0;
+    }else{document.getElementById('offVal').textContent='-- mm';}
+    const rate=frameCount?Math.round(hitCount/frameCount*100):0,avgC=hitCount?Math.round(totalConf/hitCount):0;
     document.getElementById('dFr').textContent=frameCount;
     document.getElementById('dRate').textContent=rate+'%';
     document.getElementById('dConf').textContent=avgC+'%';
-    document.getElementById('dProc').textContent=procMs+' ms';
+    document.getElementById('dProc').textContent=procTime+' ms';
     document.getElementById('dLn').textContent=totalLines;
     document.getElementById('dFps').textContent=fps;
-    document.getElementById('qOff').textContent=offKnown?(latOff>=0?'+':'')+latOff+' mm':'--';
+    document.getElementById('qOff').textContent=smCx!==null?(latOff>=0?'+':'')+latOff+' mm':'--';
     document.getElementById('qOffB').className='qb '+(Math.abs(latOff)<40?'ok':'w');
     document.getElementById('qOffB').textContent=Math.abs(latOff)<40?'OK':'WARN';
-    document.getElementById('qCnt').textContent=rawCount||'--';
-    document.getElementById('qStr').textContent=det?conf+'%':'--';
+    document.getElementById('qCnt').textContent=rawLines.length||'--';
+    document.getElementById('qStr').textContent=detected?conf+'%':'--';
     document.getElementById('qLast').textContent=lastHit;
     animId=requestAnimationFrame(frame);
   }
@@ -801,10 +807,10 @@ function triggerEmg(){
 
 function log(msg,type){const t=new Date().toLocaleTimeString('de-AT',{hour12:false}),l=document.getElementById('logList'),e=document.createElement('div');e.className='le';e.innerHTML='<span class="lt">'+t+'</span><span class="lm '+(type||'i')+'">'+msg+'</span>';l.appendChild(e);l.scrollTop=l.scrollHeight;}
 
-log('STRASSE CV v3 — Web Worker Pipeline','ok');
+log('STRASSE CV v6.0 — GPS + Pure JS CV Engine','ok');
 log('Haversine-Distanzberechnung aktiv','ok');
 log('GPS wird initialisiert — bitte Zugriff erlauben','i');
-log('Worker-Thread: Canny + Hough im Hintergrund','i');
+log('Pipeline: Graustufen + CLAHE + Canny + Hough','i');
 </script>
 </body>
 </html>
