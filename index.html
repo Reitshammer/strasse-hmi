@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>STRASSE — Live CV</title>
+<title>STRASSE — Live CV v2</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;500;600&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
@@ -165,9 +165,9 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
 <div class="emg" id="emg"><div class="emg-txt">NOT-AUS<br>AKTIV</div></div>
 <div class="app">
   <div class="topbar">
-    <div class="logo">STRASSE<small>CV LIVE</small></div>
+    <div class="logo">STRASSE<small>CV v2 DUAL-LANE</small></div>
     <div class="sep"></div>
-    <div class="badge"><div class="dot"></div><span>CV BEREIT</span></div>
+    <div class="badge"><div class="dot"></div><span>DUAL-LANE AKTIV</span></div>
     <div style="width:8px;"></div>
     <div class="clock" id="clock">--:--</div>
   </div>
@@ -191,7 +191,7 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
     </div>
 
     <div class="hud-tl">FPS <span id="hFps">--</span><br>RES <span id="hRes">--</span><br>CAM <span id="hCam">--</span></div>
-    <div class="hud-tr">CLAHE <span id="hC" style="color:var(--ac2)">ON</span><br>CANNY <span style="color:var(--ac2)">ON</span><br>ROI <span id="hR" style="color:var(--ac2)">ON</span></div>
+    <div class="hud-tr">CLAHE <span id="hC" style="color:var(--ac2)">ON</span><br>CANNY <span style="color:var(--ac2)">ON</span><br>DUAL-LANE <span id="hDL" style="color:var(--ac2)">ON</span></div>
     <div class="hud-bl"><div class="det-pill lost" id="detPill"><div class="dp"></div><span id="detTxt">WARTE...</span></div></div>
     <div class="hud-bc"><div class="conf-pill"><span class="cl">KONF</span><div class="ctrack"><div class="cfill" id="confFill" style="width:0%"></div></div><span class="cpct" id="confPct">--%</span></div></div>
     <div class="hud-br">T <span id="hT">--</span>ms<br>F <span id="hF">0</span></div>
@@ -238,6 +238,7 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
       <div class="plbl">Bildverarbeitung</div>
       <div class="trow"><span class="tlbl">CLAHE Kontrastverbesserung</span><label class="tog"><input type="checkbox" checked id="togClahe" onchange="updateP()"><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
       <div class="trow"><span class="tlbl">ROI (untere Bildhälfte)</span><label class="tog"><input type="checkbox" checked id="togRoi" onchange="updateP()"><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
+      <div class="trow"><span class="tlbl">Winkelfilter (Bankett-Unterdrückung)</span><label class="tog"><input type="checkbox" checked id="togAngle" onchange="updateP()"><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
       <div class="trow"><span class="tlbl">Linienstabilisierung</span><label class="tog"><input type="checkbox" checked id="togSmooth"><div class="tog-track"></div><div class="tog-thumb"></div></label></div>
       <div class="srow"><div class="shdr"><span class="sname">CANNY THRESHOLD</span><span class="sval" id="sv1">50</span></div><input type="range" min="10" max="120" value="50" oninput="document.getElementById('sv1').textContent=this.value;p.cannyLow=+this.value;p.cannyHigh=+this.value*2.5|0"></div>
       <div class="srow"><div class="shdr"><span class="sname">HOUGH EMPFINDLICHKEIT</span><span class="sval" id="sv2">40</span></div><input type="range" min="5" max="100" value="40" oninput="document.getElementById('sv2').textContent=this.value;p.hough=+this.value"></div>
@@ -298,10 +299,33 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
   </div>
 </div>
 <script>
-const p={cannyLow:50,cannyHigh:120,hough:40,roiH:0.60,useClahe:true,useRoi:true};
+const p={cannyLow:45,cannyHigh:110,hough:28,roiH:0.58,useClahe:true,useRoi:true,angleFilter:true};
 let camStream=null,facing='environment',animId=null,sprayActive=false,emergency=false;
-let frameCount=0,hitCount=0,totalConf=0,totalLines=0,lineHistory=[],fpsCount=0,fps=0,fpsTimer=0,lastHit='--';
-const SMOOTH=6;
+let frameCount=0,hitCount=0,totalConf=0,totalLines=0,fpsCount=0,fps=0,fpsTimer=0,lastHit='--';
+const SMOOTH=8;
+// ── Dual-lane exponential tracker ─────────────────────────────────────
+const ALPHA=0.22;
+const laneL={x:null,y1:null,y2:null,conf:0,missing:0};
+const laneR={x:null,y1:null,y2:null,conf:0,missing:0};
+const MAX_MISSING=14;
+let centerHistory=[];
+// ── Perspective warp helpers ───────────────────────────────────────────
+function perspectiveWarp(ctxD,DW,DH,roiTop){
+  // Draw trapezoid overlay to visualise the warped "birds-eye" ROI
+  const tx1=DW*0.42,tx2=DW*0.58; // top (near vanishing pt)
+  const bx1=DW*0.05,bx2=DW*0.95; // bottom (near camera)
+  const ty=roiTop,by=DH*0.97;
+  ctxD.save();
+  ctxD.strokeStyle='rgba(0,200,255,0.18)';
+  ctxD.lineWidth=1;
+  ctxD.setLineDash([4,8]);
+  ctxD.beginPath();
+  ctxD.moveTo(tx1,ty);ctxD.lineTo(bx1,by);
+  ctxD.moveTo(tx2,ty);ctxD.lineTo(bx2,by);
+  ctxD.stroke();
+  ctxD.setLineDash([]);
+  ctxD.restore();
+}
 
 // ════════════════════════════════════════════
 //  GPS ENGINE
@@ -499,9 +523,17 @@ async function startCam(){
 }
 async function flipCam(){facing=facing==='environment'?'user':'environment';if(animId){cancelAnimationFrame(animId);animId=null;}await startCam();}
 function updateP(){
-  p.useClahe=document.getElementById('togClahe').checked;p.useRoi=document.getElementById('togRoi').checked;
-  document.getElementById('hC').textContent=p.useClahe?'ON':'OFF';document.getElementById('hC').style.color=p.useClahe?'var(--ac2)':'var(--tx3)';
-  document.getElementById('hR').textContent=p.useRoi?'ON':'OFF';document.getElementById('hR').style.color=p.useRoi?'var(--ac2)':'var(--tx3)';
+  p.useClahe=document.getElementById('togClahe').checked;
+  p.useRoi=document.getElementById('togRoi').checked;
+  p.angleFilter=document.getElementById('togAngle')?.checked!==false;
+  document.getElementById('hC').textContent=p.useClahe?'ON':'OFF';
+  document.getElementById('hC').style.color=p.useClahe?'var(--ac2)':'var(--warn)';
+  document.getElementById('hDL').textContent=p.angleFilter?'ON':'OFF';
+  document.getElementById('hDL').style.color=p.angleFilter?'var(--ac2)':'var(--warn)';
+  // Reset dual-lane tracker when params change
+  laneL.x=null;laneL.conf=0;laneL.missing=0;
+  laneR.x=null;laneR.conf=0;laneR.missing=0;
+  centerHistory.length=0;
 }
 
 // Gaussian 5x5
@@ -553,11 +585,122 @@ function hough(edges,w,h,thresh,minLen,maxGap){
 
 function startLoop(){
   if(animId)cancelAnimationFrame(animId);
-  log('CV-Pipeline gestartet (Pure JS)','ok');
-  log('Canny-Kantendetektion + Hough-Transformation aktiv','ok');
+  log('CV-Pipeline v2 gestartet','ok');
+  log('Dual-Lane Tracker + Winkelfilter + Trapez-ROI aktiv','ok');
   const vid=document.getElementById('vid'),proc=document.getElementById('proc'),disp=document.getElementById('disp');
   const ctxP=proc.getContext('2d',{willReadFrequently:true}),ctxD=disp.getContext('2d');
-  const PW=320,PH=200;proc.width=PW;proc.height=PH;
+  const PW=320,PH=240;proc.width=PW;proc.height=PH;
+
+  function classifyLines(rawLines,PW,PH,roiY){
+    // Classify each Hough line as LEFT or RIGHT lane based on slope & position
+    const mid=PW/2;
+    const left=[],right=[];
+    rawLines.forEach(l=>{
+      const dx=l.x2-l.x1,dy=l.y2-l.y1;
+      if(Math.abs(dx)<2)return; // nearly vertical — skip
+      const angle=Math.abs(Math.atan2(Math.abs(dy),Math.abs(dx))*180/Math.PI);
+      // Angle filter: road lines are 15°–80° from horizontal
+      if(angle<14||angle>82)return;
+      // Extrapolate line to bottom of frame (y=PH) and ROI top (y=roiY)
+      const slope=dy/dx;
+      const xBot=l.x1+(PH-l.y1)/slope;
+      const cx=(xBot); // x at bottom = position indicator
+      if(p.angleFilter){
+        // Left lane: negative slope (going up-right) OR right side going up-left
+        if(slope<0&&cx<mid+60) left.push({...l,slope,xBot,angle,cx});
+        else if(slope>0&&cx>mid-60) right.push({...l,slope,xBot,angle,cx});
+      } else {
+        if(cx<mid) left.push({...l,slope,xBot,angle,cx});
+        else right.push({...l,slope,xBot,angle,cx});
+      }
+    });
+    // Pick best candidate per side: longest line
+    const bestL=left.sort((a,b)=>b.len-a.len)[0]||null;
+    const bestR=right.sort((a,b)=>b.len-a.len)[0]||null;
+    return{bestL,bestR,allL:left,allR:right};
+  }
+
+  function updateLane(lane,candidate,PH,roiY){
+    if(candidate){
+      // Compute full-height projected endpoints
+      const s=candidate.slope;
+      const refX=candidate.x1,refY=candidate.y1;
+      const xBottom=refX+(PH-refY)/s;
+      const xTop=refX+(roiY-refY)/s;
+      if(lane.x===null){
+        // First detection — initialise
+        lane.x=xBottom;lane.y1=roiY;lane.y2=PH;
+      } else {
+        // Exponential smoothing
+        lane.x=lane.x*(1-ALPHA)+xBottom*ALPHA;
+      }
+      lane.conf=Math.min(99,lane.conf+8);
+      lane.missing=0;
+    } else {
+      lane.missing++;
+      lane.conf=Math.max(0,lane.conf-5);
+      if(lane.missing>MAX_MISSING){lane.x=null;lane.conf=0;}
+    }
+  }
+
+  function drawLane(ctxD,lane,side,DW,DH,PW,PH,roiY){
+    if(lane.x===null||lane.conf<5)return;
+    const sx=v=>v/PW*DW,sy=v=>v/PH*DH;
+    const alpha=Math.min(0.95,lane.conf/70);
+    const col=side==='L'?`rgba(0,255,136,${alpha})`:`rgba(0,200,255,${alpha})`;
+    const glow=side==='L'?'rgba(0,255,136,0.5)':'rgba(0,200,255,0.4)';
+    // Draw projected lane line from ROI top to bottom
+    ctxD.save();
+    ctxD.strokeStyle=col;
+    ctxD.lineWidth=3;
+    ctxD.shadowColor=glow;
+    ctxD.shadowBlur=12;
+    ctxD.beginPath();
+    ctxD.moveTo(sx(lane.x)+(side==='L'?-8:8),sy(roiY)+2);
+    ctxD.lineTo(sx(lane.x),sy(PH)*0.98);
+    ctxD.stroke();
+    // Lane-side label
+    ctxD.fillStyle=col;
+    ctxD.font=`bold 9px 'Share Tech Mono',monospace`;
+    ctxD.fillText(side==='L'?'◀ L':'R ▶',sx(lane.x)+(side==='L'?-28:8),sy(roiY)+16);
+    ctxD.restore();
+  }
+
+  function drawCenter(ctxD,xL,xR,DW,DH,PW,PH,roiY){
+    if(xL===null&&xR===null)return;
+    const sx=v=>v/PW*DW,sy=v=>v/PH*DH;
+    let cx;
+    if(xL!==null&&xR!==null) cx=(xL+xR)/2;
+    else cx=xL!==null?xL+40:xR-40; // estimate if only one lane visible
+    // Smooth centre
+    centerHistory.push(cx);if(centerHistory.length>SMOOTH)centerHistory.shift();
+    const smCx=centerHistory.reduce((a,b)=>a+b,0)/centerHistory.length;
+    // Draw centre guide line dashed
+    ctxD.save();
+    ctxD.strokeStyle='rgba(255,210,0,0.7)';
+    ctxD.lineWidth=2;
+    ctxD.shadowColor='rgba(255,200,0,0.4)';
+    ctxD.shadowBlur=8;
+    ctxD.setLineDash([8,6]);
+    ctxD.beginPath();
+    ctxD.moveTo(sx(smCx),sy(roiY)+4);
+    ctxD.lineTo(sx(smCx),sy(PH)*0.98);
+    ctxD.stroke();
+    ctxD.setLineDash([]);
+    // Fill lane area between lines
+    if(xL!==null&&xR!==null){
+      ctxD.fillStyle='rgba(0,255,136,0.04)';
+      ctxD.beginPath();
+      ctxD.moveTo(sx(xL),sy(roiY)+2);
+      ctxD.lineTo(sx(xR),sy(roiY)+2);
+      ctxD.lineTo(sx(xR),sy(PH)*0.98);
+      ctxD.lineTo(sx(xL),sy(PH)*0.98);
+      ctxD.closePath();
+      ctxD.fill();
+    }
+    ctxD.restore();
+    return smCx;
+  }
 
   function frame(){
     if(!vid.videoWidth||vid.readyState<2){animId=requestAnimationFrame(frame);return;}
@@ -569,58 +712,115 @@ function startLoop(){
     const id=ctxP.getImageData(0,0,PW,PH),px=id.data;
     let gray=new Uint8Array(PW*PH);
     for(let i=0;i<PW*PH;i++)gray[i]=(px[i*4]*77+px[i*4+1]*150+px[i*4+2]*29)>>8;
-    let roiY=0,roiH2=PH;
-    if(p.useRoi){roiY=Math.floor(PH*(1-p.roiH));roiH2=PH-roiY;}
+    // Trapezoid ROI: only process road area
+    const roiY=p.useRoi?Math.floor(PH*(1-p.roiH)):0;
     let work=p.useClahe?clahe(gray,PW,PH):gray;
     const blurred=gaussBlur(work,PW,PH);
     const{mag,ang}=sobel(blurred,PW,PH);
     const n=nms(mag,ang,PW,PH);
     const edges=hysteresis(n,PW,PH,p.cannyLow,p.cannyHigh);
-    // Zero out non-ROI
-    if(p.useRoi)for(let y=0;y<roiY;y++)for(let x=0;x<PW;x++)edges[y*PW+x]=0;
-    let rawLines=hough(edges,PW,PH,p.hough,12,8);
-    rawLines.sort((a,b)=>b.len-a.len);
-    const lines=rawLines.slice(0,10);
+    // Trapezoid mask: zero out above roiY, plus triangular corners at top
+    if(p.useRoi){
+      for(let y=0;y<roiY;y++)for(let x=0;x<PW;x++)edges[y*PW+x]=0;
+      // Also zero out top-corners to suppress vanishing-point noise
+      for(let y=roiY;y<roiY+20;y++){
+        const fade=Math.floor((y-roiY)/20*(PW*0.25));
+        for(let x=0;x<fade;x++) edges[y*PW+x]=0;
+        for(let x=PW-fade;x<PW;x++) edges[y*PW+x]=0;
+      }
+    }
+    const rawLines=hough(edges,PW,PH,p.hough,15,10);
+    const{bestL,bestR,allL,allR}=classifyLines(rawLines,PW,PH,roiY);
+    updateLane(laneL,bestL,PH,roiY);
+    updateLane(laneR,bestR,PH,roiY);
     const procTime=Math.round(performance.now()-t0);
-    const doSmooth=document.getElementById('togSmooth').checked;
-    if(doSmooth&&lines.length>0){lineHistory.push((lines[0].x1+lines[0].x2)/2);if(lineHistory.length>SMOOTH)lineHistory.shift();}
-    else if(!lines.length&&lineHistory.length)lineHistory.shift();
-    const smoothX=lineHistory.length?lineHistory.reduce((a,b)=>a+b,0)/lineHistory.length:null;
+    const detected=(laneL.x!==null||laneR.x!==null);
+    const bothLanes=(laneL.x!==null&&laneR.x!==null);
+    const conf=Math.round((laneL.conf+laneR.conf)/2);
+    if(detected){hitCount++;totalConf+=conf;totalLines+=rawLines.length;lastHit=new Date().toLocaleTimeString('de-AT',{hour12:false});}
     frameCount++;
-    const detected=lines.length>0;
-    let conf=0;
-    if(detected){hitCount++;const tl=lines.reduce((s,l)=>s+l.len,0);conf=Math.min(98,Math.round(lines.length*10+tl/PW*45));totalConf+=conf;totalLines+=lines.length;lastHit=new Date().toLocaleTimeString('de-AT',{hour12:false});}
     fpsCount++;const now2=performance.now();if(now2-fpsTimer>=1000){fps=fpsCount;fpsCount=0;fpsTimer=now2;}
-    const sx=v=>v/PW*DW,sy=v=>v/PH*DH;
+    // ── Draw ──────────────────────────────────────────────────────────
     ctxD.clearRect(0,0,DW,DH);
-    // ROI shading
-    if(p.useRoi){ctxD.fillStyle='rgba(0,200,255,0.025)';ctxD.fillRect(0,sy(roiY),DW,DH-sy(roiY));ctxD.strokeStyle='rgba(0,200,255,0.2)';ctxD.lineWidth=1;ctxD.setLineDash([6,6]);ctxD.beginPath();ctxD.moveTo(0,sy(roiY));ctxD.lineTo(DW,sy(roiY));ctxD.stroke();ctxD.setLineDash([]);}
-    // Lines
-    lines.forEach((l,i)=>{const alpha=i===0?0.95:Math.max(0.2,0.55-i*0.08);ctxD.save();ctxD.strokeStyle=i===0?`rgba(0,255,136,${alpha})`:`rgba(0,200,255,${alpha})`;ctxD.lineWidth=i===0?3:1.5;if(i===0){ctxD.shadowColor='rgba(0,255,136,0.6)';ctxD.shadowBlur=10;}ctxD.beginPath();ctxD.moveTo(sx(l.x1),sy(l.y1));ctxD.lineTo(sx(l.x2),sy(l.y2));ctxD.stroke();ctxD.restore();});
-    // Smooth line
-    if(smoothX!==null){ctxD.save();ctxD.strokeStyle='rgba(255,210,0,0.45)';ctxD.lineWidth=2;ctxD.setLineDash([5,5]);ctxD.beginPath();ctxD.moveTo(sx(smoothX),sy(roiY));ctxD.lineTo(sx(smoothX),DH);ctxD.stroke();ctxD.setLineDash([]);ctxD.restore();}
+    const sxF=v=>v/PW*DW,syF=v=>v/PH*DH;
+    // ROI fill
+    if(p.useRoi){
+      ctxD.fillStyle='rgba(0,200,255,0.018)';
+      ctxD.fillRect(0,syF(roiY),DW,DH-syF(roiY));
+      ctxD.strokeStyle='rgba(0,200,255,0.18)';
+      ctxD.lineWidth=1;ctxD.setLineDash([5,7]);
+      ctxD.beginPath();ctxD.moveTo(0,syF(roiY));ctxD.lineTo(DW,syF(roiY));ctxD.stroke();
+      ctxD.setLineDash([]);
+    }
+    // Perspective guide lines
+    perspectiveWarp(ctxD,DW,DH,syF(roiY));
+    // All secondary lines (dim)
+    [...allL,...allR].forEach(l=>{
+      ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.12)';ctxD.lineWidth=1;
+      ctxD.beginPath();ctxD.moveTo(sxF(l.x1),syF(l.y1));ctxD.lineTo(sxF(l.x2),syF(l.y2));ctxD.stroke();ctxD.restore();
+    });
+    // Lane fill + centre line
+    const smCx=drawCenter(ctxD,laneL.x,laneR.x,DW,DH,PW,PH,roiY);
+    // Primary lane lines
+    drawLane(ctxD,laneL,'L',DW,DH,PW,PH,roiY);
+    drawLane(ctxD,laneR,'R',DW,DH,PW,PH,roiY);
     // Crosshair
-    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.12)';ctxD.lineWidth=1;ctxD.beginPath();ctxD.moveTo(DW/2,0);ctxD.lineTo(DW/2,DH);ctxD.stroke();ctxD.beginPath();ctxD.moveTo(0,DH*.65);ctxD.lineTo(DW,DH*.65);ctxD.stroke();ctxD.restore();
-    // Brackets
-    const bx1=DW*.08,bx2=DW*.92,by1=sy(roiY)+2,by2=DH-52,cs=18;
-    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.5)';ctxD.lineWidth=2;
-    [[bx1,by1,1,1],[bx2,by1,-1,1],[bx1,by2,1,-1],[bx2,by2,-1,-1]].forEach(([x,y,dx,dy])=>{ctxD.beginPath();ctxD.moveTo(x,y+dy*cs);ctxD.lineTo(x,y);ctxD.lineTo(x+dx*cs,y);ctxD.stroke();});ctxD.restore();
+    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.10)';ctxD.lineWidth=1;
+    ctxD.beginPath();ctxD.moveTo(DW/2,0);ctxD.lineTo(DW/2,DH);ctxD.stroke();
+    ctxD.beginPath();ctxD.moveTo(0,DH*.62);ctxD.lineTo(DW,DH*.62);ctxD.stroke();ctxD.restore();
+    // Corner brackets
+    const bx1=DW*.06,bx2=DW*.94,by1=syF(roiY)+2,by2=DH-50,cs=16;
+    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.45)';ctxD.lineWidth=2;
+    [[bx1,by1,1,1],[bx2,by1,-1,1],[bx1,by2,1,-1],[bx2,by2,-1,-1]].forEach(([x,y,dx,dy])=>{
+      ctxD.beginPath();ctxD.moveTo(x,y+dy*cs);ctxD.lineTo(x,y);ctxD.lineTo(x+dx*cs,y);ctxD.stroke();
+    });ctxD.restore();
+    // Lane type badge (DUAL / SINGLE-L / SINGLE-R)
+    const laneLabel=bothLanes?'DUAL LANE':(laneL.x!==null?'LINKS':'RECHTS');
+    const laneColor=bothLanes?'rgba(0,255,136,0.9)':'rgba(255,170,0,0.9)';
+    ctxD.save();ctxD.font="bold 9px 'Share Tech Mono',monospace";ctxD.fillStyle=laneColor;
+    ctxD.fillText(detected?laneLabel:'—',DW/2-18,syF(roiY)-4);ctxD.restore();
     // Scanline
-    const sc=(Date.now()%3000)/3000*DH,sg=ctxD.createLinearGradient(0,sc-4,0,sc+4);sg.addColorStop(0,'transparent');sg.addColorStop(.5,'rgba(0,200,255,0.06)');sg.addColorStop(1,'transparent');ctxD.fillStyle=sg;ctxD.fillRect(0,sc-4,DW,8);
-    // Nozzle
-    if(sprayActive){const nx=DW/2,ny=DH*.67;ctxD.save();ctxD.beginPath();ctxD.arc(nx,ny,14,0,Math.PI*2);ctxD.strokeStyle='rgba(0,255,136,0.85)';ctxD.lineWidth=2;ctxD.shadowColor='rgba(0,255,136,0.6)';ctxD.shadowBlur=14;ctxD.stroke();ctxD.beginPath();ctxD.arc(nx,ny,5,0,Math.PI*2);ctxD.fillStyle='rgba(0,255,136,0.9)';ctxD.fill();ctxD.restore();}
-    // Offset
-    const refX=smoothX!==null?smoothX:(lines.length?(lines[0].x1+lines[0].x2)/2:null);
+    const sc=(Date.now()%2800)/2800*DH,sg=ctxD.createLinearGradient(0,sc-4,0,sc+4);
+    sg.addColorStop(0,'transparent');sg.addColorStop(.5,'rgba(0,200,255,0.05)');sg.addColorStop(1,'transparent');
+    ctxD.fillStyle=sg;ctxD.fillRect(0,sc-4,DW,8);
+    // Nozzle indicator
+    if(sprayActive){const nx=DW/2,ny=DH*.65;ctxD.save();
+      ctxD.beginPath();ctxD.arc(nx,ny,14,0,Math.PI*2);ctxD.strokeStyle='rgba(0,255,136,0.85)';
+      ctxD.lineWidth=2;ctxD.shadowColor='rgba(0,255,136,0.6)';ctxD.shadowBlur=14;ctxD.stroke();
+      ctxD.beginPath();ctxD.arc(nx,ny,5,0,Math.PI*2);ctxD.fillStyle='rgba(0,255,136,0.9)';ctxD.fill();ctxD.restore();}
+    // ── Offset calculation from centre ────────────────────────────────
+    const refX=smCx!==undefined?smCx:(laneL.x!==null?laneL.x+40:laneR.x!==null?laneR.x-40:null);
     const latOff=refX!==null?Math.round((refX-PW/2)/PW*300):0;
-    // UI
-    const pill=document.getElementById('detPill');pill.className='det-pill '+(detected?'found':'lost');document.getElementById('detTxt').textContent=detected?'ERKANNT ('+lines.length+')':'KEINE LINIE';
-    document.getElementById('confFill').style.width=conf+'%';document.getElementById('confPct').textContent=conf+'%';
-    document.getElementById('hFps').textContent=fps;document.getElementById('hT').textContent=procTime;document.getElementById('hF').textContent=frameCount;
-    if(refX!==null){const op=Math.max(5,Math.min(95,50+(latOff/300)*50)),w=Math.abs(latOff)>40;document.getElementById('offDot').style.left=op+'%';document.getElementById('offDot').className='off-dot'+(w?' w':'');document.getElementById('offVal').textContent=(latOff>=0?'+':'')+latOff+' mm';document.getElementById('offVal').className='off-val'+(w?' w':'');}else{document.getElementById('offVal').textContent='-- mm';}
-    const rate=frameCount?Math.round(hitCount/frameCount*100):0,avgC=hitCount?Math.round(totalConf/hitCount):0;
-    document.getElementById('dFr').textContent=frameCount;document.getElementById('dRate').textContent=rate+'%';document.getElementById('dConf').textContent=avgC+'%';document.getElementById('dProc').textContent=procTime+' ms';document.getElementById('dLn').textContent=totalLines;document.getElementById('dFps').textContent=fps;
-    document.getElementById('qOff').textContent=refX!==null?(latOff>=0?'+':'')+latOff+' mm':'--';document.getElementById('qOffB').className='qb '+(Math.abs(latOff)<40?'ok':'w');document.getElementById('qOffB').textContent=Math.abs(latOff)<40?'OK':'WARN';
-    document.getElementById('qCnt').textContent=lines.length||'--';document.getElementById('qStr').textContent=lines.length?Math.round(lines[0].len)+' px':'--';document.getElementById('qLast').textContent=lastHit;
+    // ── UI updates ────────────────────────────────────────────────────
+    const pill=document.getElementById('detPill');
+    pill.className='det-pill '+(detected?'found':'lost');
+    document.getElementById('detTxt').textContent=detected?(bothLanes?'BEIDE SPUREN ('+rawLines.length+')':'EINE SPUR ('+rawLines.length+')'):'KEINE LINIE';
+    document.getElementById('confFill').style.width=conf+'%';
+    document.getElementById('confPct').textContent=conf+'%';
+    document.getElementById('hFps').textContent=fps;
+    document.getElementById('hT').textContent=procTime;
+    document.getElementById('hF').textContent=frameCount;
+    if(refX!==null){
+      const op=Math.max(5,Math.min(95,50+(latOff/300)*50)),w=Math.abs(latOff)>40;
+      document.getElementById('offDot').style.left=op+'%';
+      document.getElementById('offDot').className='off-dot'+(w?' w':'');
+      document.getElementById('offVal').textContent=(latOff>=0?'+':'')+latOff+' mm';
+      document.getElementById('offVal').className='off-val'+(w?' w':'');
+    } else {document.getElementById('offVal').textContent='-- mm';}
+    const rate=frameCount?Math.round(hitCount/frameCount*100):0;
+    const avgC=hitCount?Math.round(totalConf/hitCount):0;
+    document.getElementById('dFr').textContent=frameCount;
+    document.getElementById('dRate').textContent=rate+'%';
+    document.getElementById('dConf').textContent=avgC+'%';
+    document.getElementById('dProc').textContent=procTime+' ms';
+    document.getElementById('dLn').textContent=totalLines;
+    document.getElementById('dFps').textContent=fps;
+    document.getElementById('qOff').textContent=refX!==null?(latOff>=0?'+':'')+latOff+' mm':'--';
+    document.getElementById('qOffB').className='qb '+(Math.abs(latOff)<40?'ok':'w');
+    document.getElementById('qOffB').textContent=Math.abs(latOff)<40?'OK':'WARN';
+    document.getElementById('qCnt').textContent=rawLines.length||'--';
+    document.getElementById('qStr').textContent=detected?Math.round(conf)+'%':'--';
+    document.getElementById('qLast').textContent=lastHit;
     animId=requestAnimationFrame(frame);
   }
   animId=requestAnimationFrame(frame);
