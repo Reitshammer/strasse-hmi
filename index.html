@@ -298,7 +298,7 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
   </div>
 </div>
 <script>
-const p={cannyLow:50,cannyHigh:120,hough:40,roiH:0.60,useClahe:true,useRoi:true};
+const p={cannyLow:40,cannyHigh:100,hough:25,roiH:0.70,useClahe:true,useRoi:true};
 let camStream=null,facing='environment',animId=null,sprayActive=false,emergency=false;
 let frameCount=0,hitCount=0,totalConf=0,totalLines=0,lineHistory=[],fpsCount=0,fps=0,fpsTimer=0,lastHit='--';
 const SMOOTH=6;
@@ -586,20 +586,37 @@ function startLoop(){
   }
 
   function classifyLines(rawLines){
-    const mid=PW/2, left=[], right=[];
+    const mid=PW/2, left=[], right=[], center=[];
     rawLines.forEach(l=>{
       const dx=l.x2-l.x1, dy=l.y2-l.y1;
-      if(Math.abs(dx)<2)return;
-      const ang=Math.abs(Math.atan2(Math.abs(dy),Math.abs(dx))*180/Math.PI);
-      if(ang<14||ang>82)return;  // Bankett/Horizont rausfiltern
-      const slope=dy/dx;
-      const xBot=l.x1+(PH-l.y1)/slope;
-      if(slope<0&&xBot<mid+60) left.push({...l,slope,xBot});
-      else if(slope>0&&xBot>mid-60) right.push({...l,slope,xBot});
+      const lenAbs=Math.sqrt(dx*dx+dy*dy);
+      if(lenAbs<8)return;
+      // Winkel zur Vertikalen (0°=vertikal, 90°=horizontal)
+      const angV=Math.abs(Math.atan2(Math.abs(dx),Math.abs(dy))*180/Math.PI);
+      // Fahrzeuglinien: 0°-60° zur Vertikalen (also nicht flach liegend)
+      if(angV>65)return;
+      // X-Position in der Bildmitte (bei y=PH, also Bildunterkante)
+      let xBot;
+      if(Math.abs(dx)<1){
+        xBot=(l.x1+l.x2)/2; // vertikal — X direkt
+      } else {
+        const slope=dy/dx;
+        xBot=l.x1+(PH-l.y1)/slope;
+      }
+      const slope2=Math.abs(dx)>1?dy/dx:99999;
+      const obj={...l,slope:slope2,xBot};
+      // Klassifikation nach X-Position
+      if(xBot < mid-20) left.push(obj);
+      else if(xBot > mid+20) right.push(obj);
+      else center.push(obj);  // Mittellinie!
     });
     left.sort((a,b)=>b.len-a.len);
     right.sort((a,b)=>b.len-a.len);
-    return{bestL:left[0]||null,bestR:right[0]||null,allL:left,allR:right};
+    center.sort((a,b)=>b.len-a.len);
+    // Wenn nur Mittellinie: als BEIDE Seiten behandeln (single-line mode)
+    const bestL=left[0]||center[0]||null;
+    const bestR=right[0]||center[0]||null;
+    return{bestL,bestR,allL:left.concat(center),allR:right,center};
   }
 
   function frame(){
@@ -619,9 +636,9 @@ function startLoop(){
     const edges=hysteresis(n,PW,PH,p.cannyLow,p.cannyHigh);
     if(p.useRoi){
       for(let y=0;y<roiY;y++)for(let x=0;x<PW;x++)edges[y*PW+x]=0;
-      // Trapez-Ecken abschneiden
-      for(let y=roiY;y<roiY+18;y++){
-        const fade=Math.floor((y-roiY)/18*(PW*0.22));
+      // Trapez-Ecken: nur ganz oben leicht abschneiden
+      for(let y=roiY;y<roiY+8;y++){
+        const fade=Math.floor((y-roiY)/8*(PW*0.08));
         for(let x=0;x<fade;x++)edges[y*PW+x]=0;
         for(let x=PW-fade;x<PW;x++)edges[y*PW+x]=0;
       }
@@ -630,8 +647,10 @@ function startLoop(){
     const{bestL,bestR,allL,allR}=classifyLines(rawLines);
 
     // Tracker updaten
-    trackLane(trL, bestL?bestL.xBot:null, !!bestL);
-    trackLane(trR, bestR?bestR.xBot:null, !!bestR);
+    const xBotL=bestL?bestL.xBot:null;
+    const xBotR=bestR?bestR.xBot:null;
+    trackLane(trL, xBotL, !!bestL);
+    trackLane(trR, xBotR, !!bestR);
 
     const procTime=Math.round(performance.now()-t0);
     const detected=trL.x!==null||trR.x!==null;
