@@ -298,7 +298,7 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
   </div>
 </div>
 <script>
-const p={cannyLow:35,cannyHigh:90,hough:20,roiH:0.55,roiTop:0.20,useClahe:true,useRoi:true};
+const p={cannyLow:35,cannyHigh:88,hough:15,roiH:0.60,useClahe:true,useRoi:true};
 let camStream=null,facing='environment',animId=null,sprayActive=false,emergency=false;
 let frameCount=0,hitCount=0,totalConf=0,totalLines=0,lineHistory=[],fpsCount=0,fps=0,fpsTimer=0,lastHit='--';
 const SMOOTH=6;
@@ -553,13 +553,16 @@ function hough(edges,w,h,thresh,minLen,maxGap){
 
 function startLoop(){
   if(animId)cancelAnimationFrame(animId);
-  log('CV-Pipeline v2 gestartet','ok');
-  log('Winkelfilter + Dual-Lane-Tracker aktiv','ok');
+  log('CV-Pipeline v7 gestartet','ok');
+
   const vid=document.getElementById('vid'),proc=document.getElementById('proc'),disp=document.getElementById('disp');
   const ctxP=proc.getContext('2d',{willReadFrequently:true}),ctxD=disp.getContext('2d');
-  const PW=256,PH=144;proc.width=PW;proc.height=PH;
 
-  // Canvas-Größe EINMALIG setzen, dann nur bei Resize
+  // Kleine Prozessauflösung = schnell genug für Echtzeit auf Mobilgerät
+  const PW=192,PH=108;
+  proc.width=PW;proc.height=PH;
+
+  // Canvas nur bei Resize neu dimensionieren
   let DW=0,DH=0;
   function resizeCv(){
     const nw=(disp.offsetWidth*(window.devicePixelRatio||1))|0;
@@ -567,199 +570,197 @@ function startLoop(){
     if(nw!==DW||nh!==DH){disp.width=nw;disp.height=nh;DW=nw;DH=nh;}
   }
   resizeCv();
-  const _rh=()=>resizeCv();
-  window.addEventListener('resize',_rh);
+  window.addEventListener('resize',resizeCv);
 
-  // Dual-Lane-Tracker — lokal, kein Global-Konflikt
-  const WA=0.25,WM=12;
+  // Hilfsfunktionen
+  const sx=v=>v/PW*DW, sy=v=>v/PH*DH;
+
+  // Lane-Tracker — lokal, kein Globalkonflikt
+  const WA=0.20, WM=15;
   let trL={x:null,conf:0,mis:0}, trR={x:null,conf:0,mis:0};
-  let cHist=[], cSMOOTH=8;
+  let cHist=[];
 
   function trackLane(tr,xBot,found){
     if(found){
       tr.x=tr.x===null?xBot:tr.x*(1-WA)+xBot*WA;
-      tr.conf=Math.min(99,tr.conf+8); tr.mis=0;
-    } else {
-      tr.mis++; tr.conf=Math.max(0,tr.conf-5);
+      tr.conf=Math.min(99,tr.conf+8);tr.mis=0;
+    }else{
+      tr.mis++;tr.conf=Math.max(0,tr.conf-4);
       if(tr.mis>WM){tr.x=null;tr.conf=0;}
     }
   }
 
-  function classifyLines(rawLines){
-    const mid=PW/2, left=[], right=[], center=[];
-    rawLines.forEach(l=>{
+  // Linien klassifizieren: Links / Rechts / Mitte
+  // Winkel zur Vertikalen: 0°=senkrecht, 90°=waagrecht
+  // Fahrbahnlinien: typisch 5°–70° zur Vertikalen
+  function classifyLines(raw){
+    const mid=PW/2, left=[], right=[], ctr=[];
+    raw.forEach(l=>{
       const dx=l.x2-l.x1, dy=l.y2-l.y1;
-      const lenAbs=Math.sqrt(dx*dx+dy*dy);
-      if(lenAbs<8)return;
-      // Winkel zur Vertikalen (0°=vertikal, 90°=horizontal)
-      const angV=Math.abs(Math.atan2(Math.abs(dx),Math.abs(dy))*180/Math.PI);
-      // Fahrzeuglinien: 0°-60° zur Vertikalen (also nicht flach liegend)
-      if(angV>75)return;  // Windschutzscheibe: Linien perspektivisch flacher
-      // X-Position in der Bildmitte (bei y=PH, also Bildunterkante)
-      let xBot;
-      if(Math.abs(dx)<1){
-        xBot=(l.x1+l.x2)/2; // vertikal — X direkt
-      } else {
-        const slope=dy/dx;
-        xBot=l.x1+(PH-l.y1)/slope;
+      if(dy===0&&dx===0)return;
+      const angV=Math.atan2(Math.abs(dx),Math.abs(dy))*180/Math.PI; // 0=vertikal
+      if(angV>72)return; // flache Linien raus (Horizont, Leitplanken-Oberkante)
+      // X-Position an Bildunterkante extrapolieren
+      let xB;
+      if(Math.abs(dx)<0.5) xB=(l.x1+l.x2)/2;
+      else {
+        const sl=dy/dx;
+        xB=l.x1+(PH-l.y1)/sl;
       }
-      const slope2=Math.abs(dx)>1?dy/dx:99999;
-      const obj={...l,slope:slope2,xBot};
-      // Klassifikation nach X-Position
-      if(xBot < mid-20) left.push(obj);
-      else if(xBot > mid+20) right.push(obj);
-      else center.push(obj);  // Mittellinie!
+      const slope=Math.abs(dx)>0.5?dy/dx:1e9;
+      const obj={...l,slope,xB};
+      if(xB<mid-15)      left.push(obj);
+      else if(xB>mid+15) right.push(obj);
+      else               ctr.push(obj);
     });
     left.sort((a,b)=>b.len-a.len);
     right.sort((a,b)=>b.len-a.len);
-    center.sort((a,b)=>b.len-a.len);
-    // Wenn nur Mittellinie: als BEIDE Seiten behandeln (single-line mode)
-    const bestL=left[0]||center[0]||null;
-    const bestR=right[0]||center[0]||null;
-    return{bestL,bestR,allL:left.concat(center),allR:right,center};
+    ctr.sort((a,b)=>b.len-a.len);
+    // Mittellinie → beide Seiten bedienen
+    const bestL=left[0]||ctr[0]||null;
+    const bestR=right[0]||ctr[0]||null;
+    return{bestL,bestR,allL:left,allR:right,allC:ctr};
   }
 
   function frame(){
     if(!vid.videoWidth||vid.readyState<2){animId=requestAnimationFrame(frame);return;}
-    resizeCv();  // no-op wenn Größe unverändert
+    resizeCv();
     const t0=performance.now();
+
+    // Frame in Prozesscanvas zeichnen
     ctxP.drawImage(vid,0,0,PW,PH);
-    const id=ctxP.getImageData(0,0,PW,PH),px=id.data;
-    let gray=new Uint8Array(PW*PH);
-    for(let i=0;i<PW*PH;i++)gray[i]=(px[i*4]*77+px[i*4+1]*150+px[i*4+2]*29)>>8;
-    // ROI: Band zwischen roiTop (%) und (1-roiH) von unten
-    // Bei Windschutzscheiben-Kamera: Himmel+Armaturenbrett ausblenden
-    let roiY=0, roiYbot=PH;
-    if(p.useRoi){
-      roiY   =Math.floor(PH*p.roiTop);          // obere Grenze (Himmel raus)
-      roiYbot=Math.floor(PH*(1-p.roiH*0.45));   // untere Grenze (Motorhaube raus)
-    }
-    let work=p.useClahe?clahe(gray,PW,PH):gray;
+    const px=ctxP.getImageData(0,0,PW,PH).data;
+
+    // Graustufenkonvertierung (Luma-gewichtet)
+    const gray=new Uint8Array(PW*PH);
+    for(let i=0;i<PW*PH;i++)
+      gray[i]=(px[i*4]*77+px[i*4+1]*150+px[i*4+2]*29)>>8;
+
+    // ROI: ab 38% von oben (Horizont+Himmel raus), volle Breite
+    // Kamera blickt vorwärts — Straße ist in der unteren Bildhälfte
+    const roiY=Math.floor(PH*0.38);
+
+    // Bildverbesserung
+    const work=p.useClahe?clahe(gray,PW,PH):gray;
     const blurred=gaussBlur(work,PW,PH);
-    const{mag,ang}=sobel(blurred,PW,PH);
+    const {mag,ang}=sobel(blurred,PW,PH);
     const n=nms(mag,ang,PW,PH);
     const edges=hysteresis(n,PW,PH,p.cannyLow,p.cannyHigh);
-    if(p.useRoi){
-      // Alles über ROI-Band auf 0 setzen
-      for(let y=0;y<roiY;y++)for(let x=0;x<PW;x++)edges[y*PW+x]=0;
-      // Alles unter ROI-Band auf 0 setzen (Motorhaube/Armaturenbrett)
-      for(let y=roiYbot;y<PH;y++)for(let x=0;x<PW;x++)edges[y*PW+x]=0;
-    }
-    const rawLines=hough(edges,PW,PH,p.hough,12,8);
-    const{bestL,bestR,allL,allR}=classifyLines(rawLines);
 
-    // Tracker updaten
-    const xBotL=bestL?bestL.xBot:null;
-    const xBotR=bestR?bestR.xBot:null;
-    trackLane(trL, xBotL, !!bestL);
-    trackLane(trR, xBotR, !!bestR);
+    // ROI-Maske: nur unterhalb des Horizonts
+    for(let y=0;y<roiY;y++)
+      for(let x=0;x<PW;x++) edges[y*PW+x]=0;
+
+    // Hough
+    const raw=hough(edges,PW,PH,p.hough,8,6);
+    const{bestL,bestR,allL,allR,allC}=classifyLines(raw);
+
+    // Tracker
+    trackLane(trL, bestL?bestL.xB:null, !!bestL);
+    trackLane(trR, bestR?bestR.xB:null, !!bestR);
 
     const procTime=Math.round(performance.now()-t0);
-    const detected=trL.x!==null||trR.x!==null;
+    const det=trL.x!==null||trR.x!==null;
     const both=trL.x!==null&&trR.x!==null;
 
-    // Smoothed centre
+    // Gemittelte Mittellinie
     let smCx=null;
-    if(detected){
-      const cx=both?(trL.x+trR.x)/2:trL.x!==null?trL.x+40:trR.x-40;
-      cHist.push(cx); if(cHist.length>cSMOOTH)cHist.shift();
+    if(det){
+      const cx=both?(trL.x+trR.x)/2:trL.x!==null?trL.x:trR.x;
+      cHist.push(cx);if(cHist.length>8)cHist.shift();
       smCx=cHist.reduce((a,b)=>a+b,0)/cHist.length;
-    }
+    }else if(cHist.length){cHist.shift();}
 
     const conf=Math.round((trL.conf+trR.conf)/2);
     frameCount++;
-    if(detected){hitCount++;totalConf+=conf;totalLines+=rawLines.length;lastHit=new Date().toLocaleTimeString('de-AT',{hour12:false});}
-    fpsCount++;const now2=performance.now();if(now2-fpsTimer>=1000){fps=fpsCount;fpsCount=0;fpsTimer=now2;}
+    if(det){hitCount++;totalConf+=conf;totalLines+=raw.length;
+      lastHit=new Date().toLocaleTimeString('de-AT',{hour12:false});}
+    fpsCount++;
+    const now2=performance.now();
+    if(now2-fpsTimer>=1000){fps=fpsCount;fpsCount=0;fpsTimer=now2;}
 
-    const sx=v=>v/PW*DW, sy=v=>v/PH*DH;
+    // ── DRAW ────────────────────────────────────────────────────────
     ctxD.clearRect(0,0,DW,DH);
 
-    // ROI shading — Band zwischen roiY und roiYbot
-    if(p.useRoi){
-      // Bereich außerhalb abdunkeln
-      ctxD.fillStyle='rgba(0,0,0,0.35)';
-      ctxD.fillRect(0,0,DW,sy(roiY));
-      ctxD.fillRect(0,sy(roiYbot),DW,DH-sy(roiYbot));
-      // ROI-Band markieren
-      ctxD.strokeStyle='rgba(0,200,255,0.25)';ctxD.lineWidth=1;ctxD.setLineDash([6,6]);
-      ctxD.beginPath();
-      ctxD.moveTo(0,sy(roiY));ctxD.lineTo(DW,sy(roiY));
-      ctxD.moveTo(0,sy(roiYbot));ctxD.lineTo(DW,sy(roiYbot));
-      ctxD.stroke();ctxD.setLineDash([]);
-    }
+    // Himmel abdunkeln (über ROI)
+    ctxD.fillStyle='rgba(0,0,0,0.28)';
+    ctxD.fillRect(0,0,DW,sy(roiY));
 
-    // Perspektiv-Hilfslinien
-    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.12)';ctxD.lineWidth=1;ctxD.setLineDash([4,9]);
-    ctxD.beginPath();
-    ctxD.moveTo(DW*0.42,sy(roiY));ctxD.lineTo(DW*0.05,sy(roiYbot));
-    ctxD.moveTo(DW*0.58,sy(roiY));ctxD.lineTo(DW*0.95,sy(roiYbot));
-    ctxD.stroke();ctxD.setLineDash([]);ctxD.restore();
+    // ROI-Linie
+    ctxD.strokeStyle='rgba(0,200,255,0.30)';
+    ctxD.lineWidth=1;ctxD.setLineDash([8,6]);
+    ctxD.beginPath();ctxD.moveTo(0,sy(roiY));ctxD.lineTo(DW,sy(roiY));
+    ctxD.stroke();ctxD.setLineDash([]);
 
-    // Alle erkannten Rohlinien (dim)
-    [...allL,...allR].forEach(l=>{
-      ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.13)';ctxD.lineWidth=1;
-      ctxD.beginPath();ctxD.moveTo(sx(l.x1),sy(l.y1));ctxD.lineTo(sx(l.x2),sy(l.y2));ctxD.stroke();ctxD.restore();
+    // Alle rohen Linien (dim — Debugging)
+    [...allL,...allR,...allC].forEach(l=>{
+      ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.18)';ctxD.lineWidth=1;
+      ctxD.beginPath();ctxD.moveTo(sx(l.x1),sy(l.y1));ctxD.lineTo(sx(l.x2),sy(l.y2));
+      ctxD.stroke();ctxD.restore();
     });
 
     // Spur-Füllung
     if(both){
-      ctxD.fillStyle='rgba(0,255,136,0.04)';
+      ctxD.fillStyle='rgba(0,255,136,0.05)';
       ctxD.beginPath();
-      ctxD.moveTo(sx(trL.x),sy(roiY)+2);ctxD.lineTo(sx(trR.x),sy(roiY)+2);
-      ctxD.lineTo(sx(trR.x),sy(roiYbot));ctxD.lineTo(sx(trL.x),sy(roiYbot));
+      ctxD.moveTo(sx(trL.x),sy(roiY));ctxD.lineTo(sx(trR.x),sy(roiY));
+      ctxD.lineTo(sx(trR.x),DH);ctxD.lineTo(sx(trL.x),DH);
       ctxD.closePath();ctxD.fill();
     }
 
-    // Mittellinie (gelb gestrichelt)
+    // Mittellinie (gelb)
     if(smCx!==null){
-      ctxD.save();ctxD.strokeStyle='rgba(255,210,0,0.65)';ctxD.lineWidth=2;
-      ctxD.shadowColor='rgba(255,200,0,0.3)';ctxD.shadowBlur=6;ctxD.setLineDash([8,6]);
-      ctxD.beginPath();ctxD.moveTo(sx(smCx),sy(roiY)+4);ctxD.lineTo(sx(smCx),sy(roiYbot));
+      ctxD.save();ctxD.strokeStyle='rgba(255,210,0,0.75)';ctxD.lineWidth=2;
+      ctxD.shadowColor='rgba(255,200,0,0.4)';ctxD.shadowBlur=6;
+      ctxD.setLineDash([10,7]);
+      ctxD.beginPath();ctxD.moveTo(sx(smCx),sy(roiY)+4);ctxD.lineTo(sx(smCx),DH);
       ctxD.stroke();ctxD.setLineDash([]);ctxD.restore();
     }
 
-    // Primäre Spurlinien
+    // Primäre Spurlinien L+R
     [[trL,'L','0,255,136'],[trR,'R','0,200,255']].forEach(([tr,side,rgb])=>{
       if(tr.x===null||tr.conf<5)return;
-      const al=Math.min(0.95,tr.conf/65);
+      const al=Math.min(0.95,tr.conf/60);
       ctxD.save();
       ctxD.strokeStyle=`rgba(${rgb},${al})`;ctxD.lineWidth=3;
       ctxD.shadowColor=`rgba(${rgb},0.5)`;ctxD.shadowBlur=10;
       ctxD.beginPath();
-      ctxD.moveTo(sx(tr.x)+(side==='L'?-5:5),sy(roiY)+2);
-      ctxD.lineTo(sx(tr.x),sy(roiYbot));ctxD.stroke();
+      ctxD.moveTo(sx(tr.x)+(side==='L'?-4:4),sy(roiY)+4);
+      ctxD.lineTo(sx(tr.x),DH);ctxD.stroke();
       ctxD.fillStyle=`rgba(${rgb},${al})`;
       ctxD.font="bold 9px 'Share Tech Mono',monospace";
-      ctxD.fillText(side==='L'?'◀ L':'R ▶',sx(tr.x)+(side==='L'?-28:8),sy(roiY)+15);
+      ctxD.fillText(side==='L'?'◀ L':'R ▶',sx(tr.x)+(side==='L'?-28:8),sy(roiY)+18);
       ctxD.restore();
     });
 
     // Crosshair
-    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.11)';ctxD.lineWidth=1;
+    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.10)';ctxD.lineWidth=1;
     ctxD.beginPath();ctxD.moveTo(DW/2,0);ctxD.lineTo(DW/2,DH);ctxD.stroke();
-    ctxD.beginPath();ctxD.moveTo(0,DH*.65);ctxD.lineTo(DW,DH*.65);ctxD.stroke();ctxD.restore();
+    ctxD.beginPath();ctxD.moveTo(0,DH*0.65);ctxD.lineTo(DW,DH*0.65);ctxD.stroke();
+    ctxD.restore();
 
-    // Brackets
-    const bx1=DW*.08,bx2=DW*.92,by1=sy(roiY)+2,by2=DH-52,cs=18;
-    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.5)';ctxD.lineWidth=2;
-    [[bx1,by1,1,1],[bx2,by1,-1,1],[bx1,by2,1,-1],[bx2,by2,-1,-1]].forEach(([x,y,dx,dy])=>{
-      ctxD.beginPath();ctxD.moveTo(x,y+dy*cs);ctxD.lineTo(x,y);ctxD.lineTo(x+dx*cs,y);ctxD.stroke();
+    // Eck-Klammern (am ROI-Rand unten)
+    const bcs=16,bx1=DW*0.06,bx2=DW*0.94,byt=sy(roiY)+4,byb=DH-40;
+    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.45)';ctxD.lineWidth=2;
+    [[bx1,byt,1,1],[bx2,byt,-1,1],[bx1,byb,1,-1],[bx2,byb,-1,-1]].forEach(([x,y,dx,dy])=>{
+      ctxD.beginPath();ctxD.moveTo(x,y+dy*bcs);ctxD.lineTo(x,y);ctxD.lineTo(x+dx*bcs,y);ctxD.stroke();
     });ctxD.restore();
 
-    // Spurtyp-Badge
+    // Status-Badge
     ctxD.save();ctxD.font="bold 9px 'Share Tech Mono',monospace";
-    ctxD.fillStyle=both?'rgba(0,255,136,0.9)':'rgba(255,170,0,0.9)';
-    ctxD.fillText(detected?(both?'DUAL LANE':'EINE SPUR'):'—',DW/2-20,sy(roiY)-4);
+    ctxD.fillStyle=det?(both?'rgba(0,255,136,0.9)':'rgba(255,170,0,0.9)'):'rgba(255,60,60,0.8)';
+    ctxD.fillText(det?(both?'DUAL LANE':'EINE SPUR'):'SCAN...',DW/2-22,sy(roiY)-5);
     ctxD.restore();
 
     // Scanline
-    const sc=(Date.now()%3000)/3000*DH,sg=ctxD.createLinearGradient(0,sc-4,0,sc+4);
-    sg.addColorStop(0,'transparent');sg.addColorStop(.5,'rgba(0,200,255,0.06)');sg.addColorStop(1,'transparent');
+    const sc=(Date.now()%3000)/3000*DH;
+    const sg=ctxD.createLinearGradient(0,sc-4,0,sc+4);
+    sg.addColorStop(0,'transparent');sg.addColorStop(0.5,'rgba(0,200,255,0.06)');sg.addColorStop(1,'transparent');
     ctxD.fillStyle=sg;ctxD.fillRect(0,sc-4,DW,8);
 
-    // Nozzle
+    // Nozzle-Indikator
     if(sprayActive){
-      const nx=DW/2,ny=DH*.67;ctxD.save();
+      ctxD.save();const nx=DW/2,ny=DH*0.72;
       ctxD.beginPath();ctxD.arc(nx,ny,14,0,Math.PI*2);
       ctxD.strokeStyle='rgba(0,255,136,0.85)';ctxD.lineWidth=2;
       ctxD.shadowColor='rgba(0,255,136,0.6)';ctxD.shadowBlur=14;ctxD.stroke();
@@ -767,26 +768,27 @@ function startLoop(){
       ctxD.fillStyle='rgba(0,255,136,0.9)';ctxD.fill();ctxD.restore();
     }
 
-    // Offset berechnen
+    // Lateral-Offset
     const latOff=smCx!==null?Math.round((smCx-PW/2)/PW*300):0;
 
-    // UI
-    const pill=document.getElementById('detPill');
-    pill.className='det-pill '+(detected?'found':'lost');
-    document.getElementById('detTxt').textContent=detected?(both?'BEIDE SPUREN ('+rawLines.length+')':'EINE SPUR ('+rawLines.length+')'):'KEINE LINIE';
+    // UI aktualisieren
+    document.getElementById('detPill').className='det-pill '+(det?'found':'lost');
+    document.getElementById('detTxt').textContent=det
+      ?(both?'BEIDE SPUREN ('+raw.length+')':'EINE SPUR ('+raw.length+')'):'KEINE LINIE';
     document.getElementById('confFill').style.width=conf+'%';
     document.getElementById('confPct').textContent=conf+'%';
     document.getElementById('hFps').textContent=fps;
     document.getElementById('hT').textContent=procTime;
     document.getElementById('hF').textContent=frameCount;
     if(smCx!==null){
-      const op=Math.max(5,Math.min(95,50+(latOff/300)*50)),w=Math.abs(latOff)>40;
+      const op=Math.max(5,Math.min(95,50+(latOff/300)*50)),ww=Math.abs(latOff)>40;
       document.getElementById('offDot').style.left=op+'%';
-      document.getElementById('offDot').className='off-dot'+(w?' w':'');
+      document.getElementById('offDot').className='off-dot'+(ww?' w':'');
       document.getElementById('offVal').textContent=(latOff>=0?'+':'')+latOff+' mm';
-      document.getElementById('offVal').className='off-val'+(w?' w':'');
+      document.getElementById('offVal').className='off-val'+(ww?' w':'');
     }else{document.getElementById('offVal').textContent='-- mm';}
-    const rate=frameCount?Math.round(hitCount/frameCount*100):0,avgC=hitCount?Math.round(totalConf/hitCount):0;
+    const rate=frameCount?Math.round(hitCount/frameCount*100):0;
+    const avgC=hitCount?Math.round(totalConf/hitCount):0;
     document.getElementById('dFr').textContent=frameCount;
     document.getElementById('dRate').textContent=rate+'%';
     document.getElementById('dConf').textContent=avgC+'%';
@@ -796,8 +798,8 @@ function startLoop(){
     document.getElementById('qOff').textContent=smCx!==null?(latOff>=0?'+':'')+latOff+' mm':'--';
     document.getElementById('qOffB').className='qb '+(Math.abs(latOff)<40?'ok':'w');
     document.getElementById('qOffB').textContent=Math.abs(latOff)<40?'OK':'WARN';
-    document.getElementById('qCnt').textContent=rawLines.length||'--';
-    document.getElementById('qStr').textContent=detected?conf+'%':'--';
+    document.getElementById('qCnt').textContent=raw.length||'--';
+    document.getElementById('qStr').textContent=det?conf+'%':'--';
     document.getElementById('qLast').textContent=lastHit;
     animId=requestAnimationFrame(frame);
   }
