@@ -298,7 +298,7 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
   </div>
 </div>
 <script>
-const p={cannyLow:40,cannyHigh:100,hough:25,roiH:0.70,useClahe:true,useRoi:true};
+const p={cannyLow:35,cannyHigh:90,hough:20,roiH:0.55,roiTop:0.20,useClahe:true,useRoi:true};
 let camStream=null,facing='environment',animId=null,sprayActive=false,emergency=false;
 let frameCount=0,hitCount=0,totalConf=0,totalLines=0,lineHistory=[],fpsCount=0,fps=0,fpsTimer=0,lastHit='--';
 const SMOOTH=6;
@@ -557,7 +557,7 @@ function startLoop(){
   log('Winkelfilter + Dual-Lane-Tracker aktiv','ok');
   const vid=document.getElementById('vid'),proc=document.getElementById('proc'),disp=document.getElementById('disp');
   const ctxP=proc.getContext('2d',{willReadFrequently:true}),ctxD=disp.getContext('2d');
-  const PW=320,PH=220;proc.width=PW;proc.height=PH;
+  const PW=256,PH=144;proc.width=PW;proc.height=PH;
 
   // Canvas-Größe EINMALIG setzen, dann nur bei Resize
   let DW=0,DH=0;
@@ -594,7 +594,7 @@ function startLoop(){
       // Winkel zur Vertikalen (0°=vertikal, 90°=horizontal)
       const angV=Math.abs(Math.atan2(Math.abs(dx),Math.abs(dy))*180/Math.PI);
       // Fahrzeuglinien: 0°-60° zur Vertikalen (also nicht flach liegend)
-      if(angV>65)return;
+      if(angV>75)return;  // Windschutzscheibe: Linien perspektivisch flacher
       // X-Position in der Bildmitte (bei y=PH, also Bildunterkante)
       let xBot;
       if(Math.abs(dx)<1){
@@ -627,21 +627,23 @@ function startLoop(){
     const id=ctxP.getImageData(0,0,PW,PH),px=id.data;
     let gray=new Uint8Array(PW*PH);
     for(let i=0;i<PW*PH;i++)gray[i]=(px[i*4]*77+px[i*4+1]*150+px[i*4+2]*29)>>8;
-    let roiY=0;
-    if(p.useRoi){roiY=Math.floor(PH*(1-p.roiH));}
+    // ROI: Band zwischen roiTop (%) und (1-roiH) von unten
+    // Bei Windschutzscheiben-Kamera: Himmel+Armaturenbrett ausblenden
+    let roiY=0, roiYbot=PH;
+    if(p.useRoi){
+      roiY   =Math.floor(PH*p.roiTop);          // obere Grenze (Himmel raus)
+      roiYbot=Math.floor(PH*(1-p.roiH*0.45));   // untere Grenze (Motorhaube raus)
+    }
     let work=p.useClahe?clahe(gray,PW,PH):gray;
     const blurred=gaussBlur(work,PW,PH);
     const{mag,ang}=sobel(blurred,PW,PH);
     const n=nms(mag,ang,PW,PH);
     const edges=hysteresis(n,PW,PH,p.cannyLow,p.cannyHigh);
     if(p.useRoi){
+      // Alles über ROI-Band auf 0 setzen
       for(let y=0;y<roiY;y++)for(let x=0;x<PW;x++)edges[y*PW+x]=0;
-      // Trapez-Ecken: nur ganz oben leicht abschneiden
-      for(let y=roiY;y<roiY+8;y++){
-        const fade=Math.floor((y-roiY)/8*(PW*0.08));
-        for(let x=0;x<fade;x++)edges[y*PW+x]=0;
-        for(let x=PW-fade;x<PW;x++)edges[y*PW+x]=0;
-      }
+      // Alles unter ROI-Band auf 0 setzen (Motorhaube/Armaturenbrett)
+      for(let y=roiYbot;y<PH;y++)for(let x=0;x<PW;x++)edges[y*PW+x]=0;
     }
     const rawLines=hough(edges,PW,PH,p.hough,12,8);
     const{bestL,bestR,allL,allR}=classifyLines(rawLines);
@@ -672,20 +674,25 @@ function startLoop(){
     const sx=v=>v/PW*DW, sy=v=>v/PH*DH;
     ctxD.clearRect(0,0,DW,DH);
 
-    // ROI shading
+    // ROI shading — Band zwischen roiY und roiYbot
     if(p.useRoi){
-      ctxD.fillStyle='rgba(0,200,255,0.022)';
-      ctxD.fillRect(0,sy(roiY),DW,DH-sy(roiY));
-      ctxD.strokeStyle='rgba(0,200,255,0.2)';ctxD.lineWidth=1;ctxD.setLineDash([6,6]);
-      ctxD.beginPath();ctxD.moveTo(0,sy(roiY));ctxD.lineTo(DW,sy(roiY));ctxD.stroke();
-      ctxD.setLineDash([]);
+      // Bereich außerhalb abdunkeln
+      ctxD.fillStyle='rgba(0,0,0,0.35)';
+      ctxD.fillRect(0,0,DW,sy(roiY));
+      ctxD.fillRect(0,sy(roiYbot),DW,DH-sy(roiYbot));
+      // ROI-Band markieren
+      ctxD.strokeStyle='rgba(0,200,255,0.25)';ctxD.lineWidth=1;ctxD.setLineDash([6,6]);
+      ctxD.beginPath();
+      ctxD.moveTo(0,sy(roiY));ctxD.lineTo(DW,sy(roiY));
+      ctxD.moveTo(0,sy(roiYbot));ctxD.lineTo(DW,sy(roiYbot));
+      ctxD.stroke();ctxD.setLineDash([]);
     }
 
     // Perspektiv-Hilfslinien
     ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.12)';ctxD.lineWidth=1;ctxD.setLineDash([4,9]);
     ctxD.beginPath();
-    ctxD.moveTo(DW*0.42,sy(roiY));ctxD.lineTo(DW*0.05,DH*0.98);
-    ctxD.moveTo(DW*0.58,sy(roiY));ctxD.lineTo(DW*0.95,DH*0.98);
+    ctxD.moveTo(DW*0.42,sy(roiY));ctxD.lineTo(DW*0.05,sy(roiYbot));
+    ctxD.moveTo(DW*0.58,sy(roiY));ctxD.lineTo(DW*0.95,sy(roiYbot));
     ctxD.stroke();ctxD.setLineDash([]);ctxD.restore();
 
     // Alle erkannten Rohlinien (dim)
@@ -699,7 +706,7 @@ function startLoop(){
       ctxD.fillStyle='rgba(0,255,136,0.04)';
       ctxD.beginPath();
       ctxD.moveTo(sx(trL.x),sy(roiY)+2);ctxD.lineTo(sx(trR.x),sy(roiY)+2);
-      ctxD.lineTo(sx(trR.x),DH*0.98);ctxD.lineTo(sx(trL.x),DH*0.98);
+      ctxD.lineTo(sx(trR.x),sy(roiYbot));ctxD.lineTo(sx(trL.x),sy(roiYbot));
       ctxD.closePath();ctxD.fill();
     }
 
@@ -707,7 +714,7 @@ function startLoop(){
     if(smCx!==null){
       ctxD.save();ctxD.strokeStyle='rgba(255,210,0,0.65)';ctxD.lineWidth=2;
       ctxD.shadowColor='rgba(255,200,0,0.3)';ctxD.shadowBlur=6;ctxD.setLineDash([8,6]);
-      ctxD.beginPath();ctxD.moveTo(sx(smCx),sy(roiY)+4);ctxD.lineTo(sx(smCx),DH*0.98);
+      ctxD.beginPath();ctxD.moveTo(sx(smCx),sy(roiY)+4);ctxD.lineTo(sx(smCx),sy(roiYbot));
       ctxD.stroke();ctxD.setLineDash([]);ctxD.restore();
     }
 
@@ -720,7 +727,7 @@ function startLoop(){
       ctxD.shadowColor=`rgba(${rgb},0.5)`;ctxD.shadowBlur=10;
       ctxD.beginPath();
       ctxD.moveTo(sx(tr.x)+(side==='L'?-5:5),sy(roiY)+2);
-      ctxD.lineTo(sx(tr.x),DH*0.98);ctxD.stroke();
+      ctxD.lineTo(sx(tr.x),sy(roiYbot));ctxD.stroke();
       ctxD.fillStyle=`rgba(${rgb},${al})`;
       ctxD.font="bold 9px 'Share Tech Mono',monospace";
       ctxD.fillText(side==='L'?'◀ L':'R ▶',sx(tr.x)+(side==='L'?-28:8),sy(roiY)+15);
