@@ -581,12 +581,25 @@ function hough(edges,w,h,thresh,minLen,maxGap,acc,vis){
 function startLoop(){
   if(animId)cancelAnimationFrame(animId);
 
+  // ── Auflösung ───────────────────────────────────────────
+  var PW=192, PH=108;
+
+  // ── Pre-allokierte Buffer — EINMALIG, kein GC in frame() 
+  var _diag    = (Math.sqrt(PW*PW+PH*PH)|0)+1; // +1 sicher
+  var _gray    = new Uint8Array(PW*PH);
+  var _blurred = new Uint8Array(PW*PH);
+  var _mag     = new Float32Array(PW*PH);
+  var _ang     = new Float32Array(PW*PH);
+  var _nms     = new Float32Array(PW*PH);
+  var _edges   = new Uint8Array(PW*PH);
+  var _acc     = new Int32Array(_diag*2*180);
+  var _vis     = new Uint8Array(_diag*2*180);
+
   const vid=document.getElementById('vid');
   const proc=document.getElementById('proc');
   const disp=document.getElementById('disp');
 
   // Canvas-Größen EINMALIG setzen — nie wieder in frame() ändern
-  const PW=192, PH=108;
   proc.width=PW; proc.height=PH;
   // Display-Canvas auf tatsächliche Pixelgröße setzen (einmalig)
   const dpr=window.devicePixelRatio||1;
@@ -839,7 +852,8 @@ function startLoop(){
     animId=requestAnimationFrame(frame);
   }
 
-    log('Loop startet...','ok');
+    log('Buffers: '+Math.round((_diag*2*180*5+PW*PH*6)/1024)+' KB allokiert','ok');
+  log('Loop startet...','ok');
   animId=requestAnimationFrame(frame);
 }
 
