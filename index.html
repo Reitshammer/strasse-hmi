@@ -298,6 +298,19 @@ input[type=range].g::-webkit-slider-thumb{background:var(--ac2);box-shadow:0 0 1
   </div>
 </div>
 <script>
+// ── Null-sichere DOM-Helfer (global) ─────────────────────
+function _t(id,val){
+  var e=document.getElementById(id);
+  if(e)e.textContent=val;
+}
+function _s(id,prop,val){
+  var e=document.getElementById(id);
+  if(!e)return;
+  var parts=prop.split('.');
+  if(parts.length===1){e[prop]=val;}
+  else{e[parts[0]][parts[1]]=val;}
+}
+
 const p={cannyLow:35,cannyHigh:88,hough:15,roiH:0.60,useClahe:true,useRoi:true};
 let camStream=null,facing='environment',animId=null,sprayActive=false,emergency=false;
 let frameCount=0,hitCount=0,totalConf=0,totalLines=0,lineHistory=[],fpsCount=0,fps=0,fpsTimer=0,lastHit='--';
@@ -634,12 +647,8 @@ function startLoop(){
   }
 
   var roiY=Math.floor(PH*0.38);
-  var frameErrors=0;
 
   function frame(){
-    // Sicherheitsnetz: nach 5 Fehlern aufhören
-    // frameErrors nur loggen, nie stoppen
-
     // Video-Check
     if(!vid.videoWidth||vid.readyState<2){
       animId=requestAnimationFrame(frame);
@@ -823,35 +832,14 @@ function startLoop(){
       _t('dFps',  fps);
 
     }catch(err){
-      frameErrors++;
-      log('frame() Fehler #'+frameErrors+': '+err.message,'w');
+      log('CV Fehler: '+err.message,'w');
     }
 
     // RAF immer am Ende — auch nach Exception
     animId=requestAnimationFrame(frame);
   }
 
-  // Sichere DOM-Helfer — null-safe, nie Exception
-  function _t(id,val){var e=document.getElementById(id);if(e)e.textContent=val;}
-  function _s(id,prop,val){
-    var e=document.getElementById(id);if(!e)return;
-    var parts=prop.split('.');
-    if(parts.length===1){e[prop]=val;}
-    else{e[parts[0]][parts[1]]=val;}
-  }
-  // ── Pre-allokierte Buffer — kein GC-Druck in frame() ──────────────
-  var _gray    = new Uint8Array(PW*PH);
-  var _work    = new Uint8Array(PW*PH);
-  var _blurred = new Uint8Array(PW*PH);
-  var _mag     = new Float32Array(PW*PH);
-  var _ang     = new Float32Array(PW*PH);
-  var _nms     = new Float32Array(PW*PH);
-  var _edges   = new Uint8Array(PW*PH);
-  var _diag    = (Math.sqrt(PW*PW+PH*PH)|0);
-  var _acc     = new Int32Array(_diag*2*180);
-  var _vis     = new Uint8Array(_diag*2*180);
-  log('Buffer pre-allokiert: '+Math.round((_diag*2*180*5+PW*PH*6)/1024)+' KB','ok');
-  log('Loop startet...','ok');
+    log('Loop startet...','ok');
   animId=requestAnimationFrame(frame);
 }
 
