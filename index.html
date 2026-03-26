@@ -559,39 +559,34 @@ function hough(edges,w,h,thresh,minLen,maxGap){
 
 function startLoop(){
   if(animId)cancelAnimationFrame(animId);
-  log('CV-Pipeline v7 gestartet','ok');
-  // Page Visibility: Loop nach Tab-Wechsel wieder starten
-  document.addEventListener('visibilitychange',function(){
-    if(!document.hidden&&!animId){
-      log('Tab aktiv — Loop neu gestartet','i');
-      animId=requestAnimationFrame(frame);
-    }
-  });
 
-  const vid=document.getElementById('vid'),proc=document.getElementById('proc'),disp=document.getElementById('disp');
-  const ctxP=proc.getContext('2d',{willReadFrequently:true}),ctxD=disp.getContext('2d');
+  const vid=document.getElementById('vid');
+  const proc=document.getElementById('proc');
+  const disp=document.getElementById('disp');
 
-  // Kleine Prozessauflösung = schnell genug für Echtzeit auf Mobilgerät
-  const PW=192,PH=108;
-  proc.width=PW;proc.height=PH;
+  // Canvas-Größen EINMALIG setzen — nie wieder in frame() ändern
+  const PW=192, PH=108;
+  proc.width=PW; proc.height=PH;
+  // Display-Canvas auf tatsächliche Pixelgröße setzen (einmalig)
+  const dpr=window.devicePixelRatio||1;
+  disp.width =Math.round(disp.offsetWidth *dpr);
+  disp.height=Math.round(disp.offsetHeight*dpr);
+  const DW=disp.width, DH=disp.height;
 
-  // Canvas nur bei Resize neu dimensionieren
-  let DW=0,DH=0;
-  function resizeCv(){
-    const nw=(disp.offsetWidth*(window.devicePixelRatio||1))|0;
-    const nh=(disp.offsetHeight*(window.devicePixelRatio||1))|0;
-    if(nw!==DW||nh!==DH){disp.width=nw;disp.height=nh;DW=nw;DH=nh;}
-  }
-  resizeCv();
-  window.addEventListener('resize',resizeCv);
+  // Contexts holen NACH dem Setzen der Größe
+  const ctxP=proc.getContext('2d',{willReadFrequently:true});
+  const ctxD=disp.getContext('2d');
 
-  // Hilfsfunktionen
-  const sx=v=>v/PW*DW, sy=v=>v/PH*DH;
+  log('Canvas: proc='+PW+'x'+PH+' disp='+DW+'x'+DH,'ok');
 
-  // Lane-Tracker — lokal, kein Globalkonflikt
+  // Skalierungsfunktionen
+  function sx(v){return v/PW*DW;}
+  function sy(v){return v/PH*DH;}
+
+  // Lane-Tracker
   const WA=0.20, WM=15;
-  let trL={x:null,conf:0,mis:0}, trR={x:null,conf:0,mis:0};
-  let cHist=[];
+  var trL={x:null,conf:0,mis:0}, trR={x:null,conf:0,mis:0};
+  var cHist=[];
 
   function trackLane(tr,xBot,found){
     if(found){
@@ -603,224 +598,236 @@ function startLoop(){
     }
   }
 
-  // Linien klassifizieren: Links / Rechts / Mitte
-  // Winkel zur Vertikalen: 0°=senkrecht, 90°=waagrecht
-  // Fahrbahnlinien: typisch 5°–70° zur Vertikalen
   function classifyLines(raw){
-    const mid=PW/2, left=[], right=[], ctr=[];
-    raw.forEach(l=>{
-      const dx=l.x2-l.x1, dy=l.y2-l.y1;
-      if(dy===0&&dx===0)return;
-      const angV=Math.atan2(Math.abs(dx),Math.abs(dy))*180/Math.PI; // 0=vertikal
-      if(angV>72)return; // flache Linien raus (Horizont, Leitplanken-Oberkante)
-      // X-Position an Bildunterkante extrapolieren
-      let xB;
-      if(Math.abs(dx)<0.5) xB=(l.x1+l.x2)/2;
-      else {
-        const sl=dy/dx;
-        xB=l.x1+(PH-l.y1)/sl;
-      }
-      const slope=Math.abs(dx)>0.5?dy/dx:1e9;
-      const obj={...l,slope,xB};
-      if(xB<mid-15)      left.push(obj);
+    var mid=PW/2, left=[], right=[], ctr=[];
+    for(var i=0;i<raw.length;i++){
+      var l=raw[i];
+      var dx=l.x2-l.x1, dy=l.y2-l.y1;
+      if(dx===0&&dy===0)continue;
+      var angV=Math.atan2(Math.abs(dx),Math.abs(dy))*180/Math.PI;
+      if(angV>72)continue;
+      var xB;
+      if(Math.abs(dx)<0.5){ xB=(l.x1+l.x2)/2; }
+      else { var sl=dy/dx; xB=l.x1+(PH-l.y1)/sl; }
+      var slope=Math.abs(dx)>0.5?dy/dx:1e9;
+      var obj={x1:l.x1,y1:l.y1,x2:l.x2,y2:l.y2,len:l.len,slope:slope,xB:xB};
+      if(xB<mid-15) left.push(obj);
       else if(xB>mid+15) right.push(obj);
-      else               ctr.push(obj);
-    });
-    left.sort((a,b)=>b.len-a.len);
-    right.sort((a,b)=>b.len-a.len);
-    ctr.sort((a,b)=>b.len-a.len);
-    // Mittellinie → beide Seiten bedienen
-    const bestL=left[0]||ctr[0]||null;
-    const bestR=right[0]||ctr[0]||null;
-    return{bestL,bestR,allL:left,allR:right,allC:ctr};
+      else ctr.push(obj);
+    }
+    left.sort(function(a,b){return b.len-a.len;});
+    right.sort(function(a,b){return b.len-a.len;});
+    ctr.sort(function(a,b){return b.len-a.len;});
+    return{
+      bestL:left[0]||ctr[0]||null,
+      bestR:right[0]||ctr[0]||null,
+      allL:left, allR:right, allC:ctr
+    };
   }
+
+  var roiY=Math.floor(PH*0.38);
+  var frameErrors=0;
 
   function frame(){
-    // Auf Mobile kann readyState kurz unter 2 fallen — nicht stoppen, warten
-    if(!vid.videoWidth){animId=requestAnimationFrame(frame);return;}
-    if(vid.readyState<2){
-      // Video kurz nicht bereit — Loop am Leben halten, nicht verarbeiten
-      animId=requestAnimationFrame(frame);return;
-    }
-    resizeCv();
-    const t0=performance.now();
+    // Sicherheitsnetz: nach 5 Fehlern aufhören
+    if(frameErrors>5){log('Loop gestoppt nach '+frameErrors+' Fehlern','w');return;}
 
-    // Frame in Prozesscanvas zeichnen
-    ctxP.drawImage(vid,0,0,PW,PH);
-    const px=ctxP.getImageData(0,0,PW,PH).data;
-
-    // Graustufenkonvertierung (Luma-gewichtet)
-    const gray=new Uint8Array(PW*PH);
-    for(let i=0;i<PW*PH;i++)
-      gray[i]=(px[i*4]*77+px[i*4+1]*150+px[i*4+2]*29)>>8;
-
-    // ROI: ab 38% von oben (Horizont+Himmel raus), volle Breite
-    // Kamera blickt vorwärts — Straße ist in der unteren Bildhälfte
-    const roiY=Math.floor(PH*0.38);
-
-    // Bildverbesserung
-    const work=p.useClahe?clahe(gray,PW,PH):gray;
-    const blurred=gaussBlur(work,PW,PH);
-    const {mag,ang}=sobel(blurred,PW,PH);
-    const n=nms(mag,ang,PW,PH);
-    const edges=hysteresis(n,PW,PH,p.cannyLow,p.cannyHigh);
-
-    // ROI-Maske: nur unterhalb des Horizonts
-    for(let y=0;y<roiY;y++)
-      for(let x=0;x<PW;x++) edges[y*PW+x]=0;
-
-    // Hough
-    const raw=hough(edges,PW,PH,p.hough,8,6);
-    const{bestL,bestR,allL,allR,allC}=classifyLines(raw);
-
-    // Tracker
-    trackLane(trL, bestL?bestL.xB:null, !!bestL);
-    trackLane(trR, bestR?bestR.xB:null, !!bestR);
-
-    const procTime=Math.round(performance.now()-t0);
-    const det=trL.x!==null||trR.x!==null;
-    const both=trL.x!==null&&trR.x!==null;
-
-    // Gemittelte Mittellinie
-    let smCx=null;
-    if(det){
-      const cx=both?(trL.x+trR.x)/2:trL.x!==null?trL.x:trR.x;
-      cHist.push(cx);if(cHist.length>8)cHist.shift();
-      smCx=cHist.reduce((a,b)=>a+b,0)/cHist.length;
-    }else if(cHist.length){cHist.shift();}
-
-    const conf=Math.round((trL.conf+trR.conf)/2);
-    frameCount++;
-    if(det){hitCount++;totalConf+=conf;totalLines+=raw.length;
-      lastHit=new Date().toLocaleTimeString('de-AT',{hour12:false});}
-    fpsCount++;
-    const now2=performance.now();
-    if(now2-fpsTimer>=1000){fps=fpsCount;fpsCount=0;fpsTimer=now2;}
-
-    // ── DRAW ────────────────────────────────────────────────────────
-    ctxD.clearRect(0,0,DW,DH);
-
-    // Himmel abdunkeln (über ROI)
-    ctxD.fillStyle='rgba(0,0,0,0.28)';
-    ctxD.fillRect(0,0,DW,sy(roiY));
-
-    // ROI-Linie
-    ctxD.strokeStyle='rgba(0,200,255,0.30)';
-    ctxD.lineWidth=1;ctxD.setLineDash([8,6]);
-    ctxD.beginPath();ctxD.moveTo(0,sy(roiY));ctxD.lineTo(DW,sy(roiY));
-    ctxD.stroke();ctxD.setLineDash([]);
-
-    // Alle rohen Linien (dim — Debugging)
-    [...allL,...allR,...allC].forEach(l=>{
-      ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.18)';ctxD.lineWidth=1;
-      ctxD.beginPath();ctxD.moveTo(sx(l.x1),sy(l.y1));ctxD.lineTo(sx(l.x2),sy(l.y2));
-      ctxD.stroke();ctxD.restore();
-    });
-
-    // Spur-Füllung
-    if(both){
-      ctxD.fillStyle='rgba(0,255,136,0.05)';
-      ctxD.beginPath();
-      ctxD.moveTo(sx(trL.x),sy(roiY));ctxD.lineTo(sx(trR.x),sy(roiY));
-      ctxD.lineTo(sx(trR.x),DH);ctxD.lineTo(sx(trL.x),DH);
-      ctxD.closePath();ctxD.fill();
+    // Video-Check
+    if(!vid.videoWidth||vid.readyState<2){
+      animId=requestAnimationFrame(frame);
+      return;
     }
 
-    // Mittellinie (gelb)
-    if(smCx!==null){
-      ctxD.save();ctxD.strokeStyle='rgba(255,210,0,0.75)';ctxD.lineWidth=2;
-      ctxD.shadowColor='rgba(255,200,0,0.4)';ctxD.shadowBlur=6;
-      ctxD.setLineDash([10,7]);
-      ctxD.beginPath();ctxD.moveTo(sx(smCx),sy(roiY)+4);ctxD.lineTo(sx(smCx),DH);
-      ctxD.stroke();ctxD.setLineDash([]);ctxD.restore();
-    }
+    try{
+      var t0=performance.now();
 
-    // Primäre Spurlinien L+R
-    [[trL,'L','0,255,136'],[trR,'R','0,200,255']].forEach(([tr,side,rgb])=>{
-      if(tr.x===null||tr.conf<5)return;
-      const al=Math.min(0.95,tr.conf/60);
-      ctxD.save();
-      ctxD.strokeStyle=`rgba(${rgb},${al})`;ctxD.lineWidth=3;
-      ctxD.shadowColor=`rgba(${rgb},0.5)`;ctxD.shadowBlur=10;
-      ctxD.beginPath();
-      ctxD.moveTo(sx(tr.x)+(side==='L'?-4:4),sy(roiY)+4);
-      ctxD.lineTo(sx(tr.x),DH);ctxD.stroke();
-      ctxD.fillStyle=`rgba(${rgb},${al})`;
-      ctxD.font="bold 9px 'Share Tech Mono',monospace";
-      ctxD.fillText(side==='L'?'◀ L':'R ▶',sx(tr.x)+(side==='L'?-28:8),sy(roiY)+18);
+      // Frame lesen
+      ctxP.drawImage(vid,0,0,PW,PH);
+      var imgd=ctxP.getImageData(0,0,PW,PH);
+      var px=imgd.data;
+
+      // Graustufen
+      var gray=new Uint8Array(PW*PH);
+      for(var i=0;i<PW*PH;i++)
+        gray[i]=(px[i*4]*77+px[i*4+1]*150+px[i*4+2]*29)>>8;
+
+      // CV-Pipeline
+      var work=p.useClahe?clahe(gray,PW,PH):gray;
+      var blurred=gaussBlur(work,PW,PH);
+      var sa=sobel(blurred,PW,PH);
+      var nm=nms(sa.mag,sa.ang,PW,PH);
+      var edges=hysteresis(nm,PW,PH,p.cannyLow,p.cannyHigh);
+
+      // ROI-Maske
+      for(var y=0;y<roiY;y++)
+        for(var x=0;x<PW;x++) edges[y*PW+x]=0;
+
+      // Linienerkennung
+      var raw=hough(edges,PW,PH,p.hough,8,6);
+      var cl=classifyLines(raw);
+
+      trackLane(trL, cl.bestL?cl.bestL.xB:null, !!cl.bestL);
+      trackLane(trR, cl.bestR?cl.bestR.xB:null, !!cl.bestR);
+
+      var procTime=Math.round(performance.now()-t0);
+      var det=trL.x!==null||trR.x!==null;
+      var both=trL.x!==null&&trR.x!==null;
+
+      // Mittellinie
+      var smCx=null;
+      if(det){
+        var cx=both?(trL.x+trR.x)/2:trL.x!==null?trL.x:trR.x;
+        cHist.push(cx);if(cHist.length>8)cHist.shift();
+        smCx=0;for(var k=0;k<cHist.length;k++)smCx+=cHist[k];smCx/=cHist.length;
+      }else if(cHist.length){cHist.shift();}
+
+      var conf=Math.round((trL.conf+trR.conf)/2);
+      frameCount++;
+      if(det){hitCount++;totalConf+=conf;totalLines+=raw.length;
+        lastHit=new Date().toLocaleTimeString('de-AT',{hour12:false});}
+      fpsCount++;
+      var now2=performance.now();
+      if(now2-fpsTimer>=1000){fps=fpsCount;fpsCount=0;fpsTimer=now2;}
+
+      // ── DRAW ──────────────────────────────────────────────────────
+      ctxD.clearRect(0,0,DW,DH);
+
+      // Himmel abdunkeln
+      ctxD.fillStyle='rgba(0,0,0,0.28)';
+      ctxD.fillRect(0,0,DW,sy(roiY));
+
+      // ROI-Linie
+      ctxD.strokeStyle='rgba(0,200,255,0.30)';
+      ctxD.lineWidth=1;ctxD.setLineDash([8,6]);
+      ctxD.beginPath();ctxD.moveTo(0,sy(roiY));ctxD.lineTo(DW,sy(roiY));
+      ctxD.stroke();ctxD.setLineDash([]);
+
+      // Rohe Linien
+      var allRaw=cl.allL.concat(cl.allR,cl.allC);
+      for(var i=0;i<allRaw.length;i++){
+        var l=allRaw[i];
+        ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.18)';ctxD.lineWidth=1;
+        ctxD.beginPath();ctxD.moveTo(sx(l.x1),sy(l.y1));ctxD.lineTo(sx(l.x2),sy(l.y2));
+        ctxD.stroke();ctxD.restore();
+      }
+
+      // Spur-Füllung
+      if(both){
+        ctxD.fillStyle='rgba(0,255,136,0.05)';
+        ctxD.beginPath();
+        ctxD.moveTo(sx(trL.x),sy(roiY));ctxD.lineTo(sx(trR.x),sy(roiY));
+        ctxD.lineTo(sx(trR.x),DH);ctxD.lineTo(sx(trL.x),DH);
+        ctxD.closePath();ctxD.fill();
+      }
+
+      // Mittellinie
+      if(smCx!==null){
+        ctxD.save();ctxD.strokeStyle='rgba(255,210,0,0.75)';ctxD.lineWidth=2;
+        ctxD.shadowColor='rgba(255,200,0,0.4)';ctxD.shadowBlur=6;
+        ctxD.setLineDash([10,7]);
+        ctxD.beginPath();ctxD.moveTo(sx(smCx),sy(roiY)+4);ctxD.lineTo(sx(smCx),DH);
+        ctxD.stroke();ctxD.setLineDash([]);ctxD.restore();
+      }
+
+      // Spurlinien
+      var laneData=[[trL,'L','0,255,136'],[trR,'R','0,200,255']];
+      for(var i=0;i<laneData.length;i++){
+        var tr=laneData[i][0],side=laneData[i][1],rgb=laneData[i][2];
+        if(tr.x===null||tr.conf<5)continue;
+        var al=Math.min(0.95,tr.conf/60);
+        ctxD.save();
+        ctxD.strokeStyle='rgba('+rgb+','+al+')';ctxD.lineWidth=3;
+        ctxD.shadowColor='rgba('+rgb+',0.5)';ctxD.shadowBlur=10;
+        ctxD.beginPath();
+        ctxD.moveTo(sx(tr.x)+(side==='L'?-4:4),sy(roiY)+4);
+        ctxD.lineTo(sx(tr.x),DH);ctxD.stroke();
+        ctxD.fillStyle='rgba('+rgb+','+al+')';
+        ctxD.font="bold 9px 'Share Tech Mono',monospace";
+        ctxD.fillText(side==='L'?'< L':'R >',sx(tr.x)+(side==='L'?-28:8),sy(roiY)+18);
+        ctxD.restore();
+      }
+
+      // Crosshair
+      ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.10)';ctxD.lineWidth=1;
+      ctxD.beginPath();ctxD.moveTo(DW/2,0);ctxD.lineTo(DW/2,DH);ctxD.stroke();
+      ctxD.beginPath();ctxD.moveTo(0,DH*0.65);ctxD.lineTo(DW,DH*0.65);ctxD.stroke();
       ctxD.restore();
-    });
 
-    // Crosshair
-    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.10)';ctxD.lineWidth=1;
-    ctxD.beginPath();ctxD.moveTo(DW/2,0);ctxD.lineTo(DW/2,DH);ctxD.stroke();
-    ctxD.beginPath();ctxD.moveTo(0,DH*0.65);ctxD.lineTo(DW,DH*0.65);ctxD.stroke();
-    ctxD.restore();
+      // Eck-Klammern
+      var bcs=16,bx1=DW*0.06,bx2=DW*0.94,byt=sy(roiY)+4,byb=DH-40;
+      ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.45)';ctxD.lineWidth=2;
+      var brk=[[bx1,byt,1,1],[bx2,byt,-1,1],[bx1,byb,1,-1],[bx2,byb,-1,-1]];
+      for(var i=0;i<brk.length;i++){
+        var bx=brk[i][0],by=brk[i][1],bdx=brk[i][2],bdy=brk[i][3];
+        ctxD.beginPath();ctxD.moveTo(bx,by+bdy*bcs);ctxD.lineTo(bx,by);ctxD.lineTo(bx+bdx*bcs,by);ctxD.stroke();
+      }
+      ctxD.restore();
 
-    // Eck-Klammern (am ROI-Rand unten)
-    const bcs=16,bx1=DW*0.06,bx2=DW*0.94,byt=sy(roiY)+4,byb=DH-40;
-    ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.45)';ctxD.lineWidth=2;
-    [[bx1,byt,1,1],[bx2,byt,-1,1],[bx1,byb,1,-1],[bx2,byb,-1,-1]].forEach(([x,y,dx,dy])=>{
-      ctxD.beginPath();ctxD.moveTo(x,y+dy*bcs);ctxD.lineTo(x,y);ctxD.lineTo(x+dx*bcs,y);ctxD.stroke();
-    });ctxD.restore();
+      // Status Badge
+      ctxD.save();ctxD.font="bold 9px 'Share Tech Mono',monospace";
+      ctxD.fillStyle=det?(both?'rgba(0,255,136,0.9)':'rgba(255,170,0,0.9)'):'rgba(255,60,60,0.8)';
+      ctxD.fillText(det?(both?'DUAL LANE':'EINE SPUR'):'SCAN...',DW/2-22,sy(roiY)-5);
+      ctxD.restore();
 
-    // Status-Badge
-    ctxD.save();ctxD.font="bold 9px 'Share Tech Mono',monospace";
-    ctxD.fillStyle=det?(both?'rgba(0,255,136,0.9)':'rgba(255,170,0,0.9)'):'rgba(255,60,60,0.8)';
-    ctxD.fillText(det?(both?'DUAL LANE':'EINE SPUR'):'SCAN...',DW/2-22,sy(roiY)-5);
-    ctxD.restore();
+      // Scanline
+      var sc=(Date.now()%3000)/3000*DH;
+      var sg=ctxD.createLinearGradient(0,sc-4,0,sc+4);
+      sg.addColorStop(0,'transparent');sg.addColorStop(0.5,'rgba(0,200,255,0.06)');sg.addColorStop(1,'transparent');
+      ctxD.fillStyle=sg;ctxD.fillRect(0,sc-4,DW,8);
 
-    // Scanline
-    const sc=(Date.now()%3000)/3000*DH;
-    const sg=ctxD.createLinearGradient(0,sc-4,0,sc+4);
-    sg.addColorStop(0,'transparent');sg.addColorStop(0.5,'rgba(0,200,255,0.06)');sg.addColorStop(1,'transparent');
-    ctxD.fillStyle=sg;ctxD.fillRect(0,sc-4,DW,8);
+      if(sprayActive){
+        ctxD.save();var nx=DW/2,ny=DH*0.72;
+        ctxD.beginPath();ctxD.arc(nx,ny,14,0,Math.PI*2);
+        ctxD.strokeStyle='rgba(0,255,136,0.85)';ctxD.lineWidth=2;
+        ctxD.shadowColor='rgba(0,255,136,0.6)';ctxD.shadowBlur=14;ctxD.stroke();
+        ctxD.beginPath();ctxD.arc(nx,ny,5,0,Math.PI*2);
+        ctxD.fillStyle='rgba(0,255,136,0.9)';ctxD.fill();ctxD.restore();
+      }
 
-    // Nozzle-Indikator
-    if(sprayActive){
-      ctxD.save();const nx=DW/2,ny=DH*0.72;
-      ctxD.beginPath();ctxD.arc(nx,ny,14,0,Math.PI*2);
-      ctxD.strokeStyle='rgba(0,255,136,0.85)';ctxD.lineWidth=2;
-      ctxD.shadowColor='rgba(0,255,136,0.6)';ctxD.shadowBlur=14;ctxD.stroke();
-      ctxD.beginPath();ctxD.arc(nx,ny,5,0,Math.PI*2);
-      ctxD.fillStyle='rgba(0,255,136,0.9)';ctxD.fill();ctxD.restore();
+      // Offset
+      var latOff=smCx!==null?Math.round((smCx-PW/2)/PW*300):0;
+
+      // UI
+      document.getElementById('detPill').className='det-pill '+(det?'found':'lost');
+      document.getElementById('detTxt').textContent=det
+        ?(both?'BEIDE SPUREN ('+raw.length+')':'EINE SPUR ('+raw.length+')'):'KEINE LINIE';
+      document.getElementById('confFill').style.width=conf+'%';
+      document.getElementById('confPct').textContent=conf+'%';
+      document.getElementById('hFps').textContent=fps;
+      document.getElementById('hT').textContent=procTime;
+      document.getElementById('hF').textContent=frameCount;
+      if(smCx!==null){
+        var op=Math.max(5,Math.min(95,50+(latOff/300)*50)),ww=Math.abs(latOff)>40;
+        document.getElementById('offDot').style.left=op+'%';
+        document.getElementById('offDot').className='off-dot'+(ww?' w':'');
+        document.getElementById('offVal').textContent=(latOff>=0?'+':'')+latOff+' mm';
+        document.getElementById('offVal').className='off-val'+(ww?' w':'');
+      }else{document.getElementById('offVal').textContent='-- mm';}
+      var rate=frameCount?Math.round(hitCount/frameCount*100):0;
+      var avgC=hitCount?Math.round(totalConf/hitCount):0;
+      document.getElementById('dFr').textContent=frameCount;
+      document.getElementById('dRate').textContent=rate+'%';
+      document.getElementById('dConf').textContent=avgC+'%';
+      document.getElementById('dProc').textContent=procTime+' ms';
+      document.getElementById('dLn').textContent=totalLines;
+      document.getElementById('dFps').textContent=fps;
+      document.getElementById('qOff').textContent=smCx!==null?(latOff>=0?'+':'')+latOff+' mm':'--';
+      document.getElementById('qOffB').className='qb '+(Math.abs(latOff)<40?'ok':'w');
+      document.getElementById('qOffB').textContent=Math.abs(latOff)<40?'OK':'WARN';
+      document.getElementById('qCnt').textContent=raw.length||'--';
+      document.getElementById('qStr').textContent=det?conf+'%':'--';
+      document.getElementById('qLast').textContent=lastHit;
+
+    }catch(err){
+      frameErrors++;
+      log('frame() Fehler #'+frameErrors+': '+err.message,'w');
     }
 
-    // Lateral-Offset
-    const latOff=smCx!==null?Math.round((smCx-PW/2)/PW*300):0;
-
-    // UI aktualisieren
-    document.getElementById('detPill').className='det-pill '+(det?'found':'lost');
-    document.getElementById('detTxt').textContent=det
-      ?(both?'BEIDE SPUREN ('+raw.length+')':'EINE SPUR ('+raw.length+')'):'KEINE LINIE';
-    document.getElementById('confFill').style.width=conf+'%';
-    document.getElementById('confPct').textContent=conf+'%';
-    document.getElementById('hFps').textContent=fps;
-    document.getElementById('hT').textContent=procTime;
-    document.getElementById('hF').textContent=frameCount;
-    if(smCx!==null){
-      const op=Math.max(5,Math.min(95,50+(latOff/300)*50)),ww=Math.abs(latOff)>40;
-      document.getElementById('offDot').style.left=op+'%';
-      document.getElementById('offDot').className='off-dot'+(ww?' w':'');
-      document.getElementById('offVal').textContent=(latOff>=0?'+':'')+latOff+' mm';
-      document.getElementById('offVal').className='off-val'+(ww?' w':'');
-    }else{document.getElementById('offVal').textContent='-- mm';}
-    const rate=frameCount?Math.round(hitCount/frameCount*100):0;
-    const avgC=hitCount?Math.round(totalConf/hitCount):0;
-    document.getElementById('dFr').textContent=frameCount;
-    document.getElementById('dRate').textContent=rate+'%';
-    document.getElementById('dConf').textContent=avgC+'%';
-    document.getElementById('dProc').textContent=procTime+' ms';
-    document.getElementById('dLn').textContent=totalLines;
-    document.getElementById('dFps').textContent=fps;
-    document.getElementById('qOff').textContent=smCx!==null?(latOff>=0?'+':'')+latOff+' mm':'--';
-    document.getElementById('qOffB').className='qb '+(Math.abs(latOff)<40?'ok':'w');
-    document.getElementById('qOffB').textContent=Math.abs(latOff)<40?'OK':'WARN';
-    document.getElementById('qCnt').textContent=raw.length||'--';
-    document.getElementById('qStr').textContent=det?conf+'%':'--';
-    document.getElementById('qLast').textContent=lastHit;
+    // RAF immer am Ende — auch nach Exception
     animId=requestAnimationFrame(frame);
   }
+
+  log('Loop startet...','ok');
   animId=requestAnimationFrame(frame);
 }
 
