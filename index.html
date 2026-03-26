@@ -512,7 +512,7 @@ function updateP(){
 
 // Gaussian 5x5
 const G5=[2,4,5,4,2,4,9,12,9,4,5,12,15,12,5,4,9,12,9,4,2,4,5,4,2],G5S=159;
-function gaussBlur(g,w,h){const o=new Uint8Array(g.length);for(let y=2;y<h-2;y++){for(let x=2;x<w-2;x++){let s=0;for(let ky=-2;ky<=2;ky++)for(let kx=-2;kx<=2;kx++)s+=g[(y+ky)*w+(x+kx)]*G5[(ky+2)*5+(kx+2)];o[y*w+x]=s/G5S|0;}}return o;}
+function gaussBlur(g,w,h,o){if(!o)o=new Uint8Array(g.length);else{for(var _i=0;_i<o.length;_i++)o[_i]=g[_i];}for(var y=2;y<h-2;y++){for(var x=2;x<w-2;x++){var s=0;for(var ky=-2;ky<=2;ky++)for(var kx=-2;kx<=2;kx++)s+=g[(y+ky)*w+(x+kx)]*G5[(ky+2)*5+(kx+2)];o[y*w+x]=s/G5S|0;}}return o;}
 
 function clahe(g,w,h){
   const o=new Uint8Array(g.length),TW=48,TH=48;
@@ -529,19 +529,27 @@ function clahe(g,w,h){
   }}return o;
 }
 
-function sobel(img,w,h){const mag=new Float32Array(w*h),ang=new Float32Array(w*h);for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){const gx=-img[(y-1)*w+(x-1)]-2*img[y*w+(x-1)]-img[(y+1)*w+(x-1)]+img[(y-1)*w+(x+1)]+2*img[y*w+(x+1)]+img[(y+1)*w+(x+1)];const gy=-img[(y-1)*w+(x-1)]-2*img[(y-1)*w+x]-img[(y-1)*w+(x+1)]+img[(y+1)*w+(x-1)]+2*img[(y+1)*w+x]+img[(y+1)*w+(x+1)];mag[y*w+x]=Math.sqrt(gx*gx+gy*gy);ang[y*w+x]=Math.atan2(gy,gx);}}return{mag,ang};}
+function sobel(img,w,h,mag,ang){if(!mag)mag=new Float32Array(w*h);if(!ang)ang=new Float32Array(w*h);for(var y=1;y<h-1;y++){for(var x=1;x<w-1;x++){var gx=-img[(y-1)*w+(x-1)]-2*img[y*w+(x-1)]-img[(y+1)*w+(x-1)]+img[(y-1)*w+(x+1)]+2*img[y*w+(x+1)]+img[(y+1)*w+(x+1)];var gy=-img[(y-1)*w+(x-1)]-2*img[(y-1)*w+x]-img[(y-1)*w+(x+1)]+img[(y+1)*w+(x-1)]+2*img[(y+1)*w+x]+img[(y+1)*w+(x+1)];mag[y*w+x]=Math.sqrt(gx*gx+gy*gy);ang[y*w+x]=Math.atan2(gy,gx);}}return{mag:mag,ang:ang};}
 
-function nms(mag,ang,w,h){const o=new Float32Array(w*h);for(let y=1;y<h-1;y++){for(let x=1;x<w-1;x++){const a=(ang[y*w+x]*180/Math.PI+180)%180;let n1,n2;if(a<22.5||a>=157.5){n1=mag[y*w+(x-1)];n2=mag[y*w+(x+1)];}else if(a<67.5){n1=mag[(y-1)*w+(x+1)];n2=mag[(y+1)*w+(x-1)];}else if(a<112.5){n1=mag[(y-1)*w+x];n2=mag[(y+1)*w+x];}else{n1=mag[(y-1)*w+(x-1)];n2=mag[(y+1)*w+(x+1)];}const m=mag[y*w+x];o[y*w+x]=(m>=n1&&m>=n2)?m:0;}}return o;}
+function nms(mag,ang,w,h,o){if(!o)o=new Float32Array(w*h);for(var y=1;y<h-1;y++){for(var x=1;x<w-1;x++){var a=(ang[y*w+x]*180/Math.PI+180)%180;var n1,n2;if(a<22.5||a>=157.5){n1=mag[y*w+(x-1)];n2=mag[y*w+(x+1)];}else if(a<67.5){n1=mag[(y-1)*w+(x+1)];n2=mag[(y+1)*w+(x-1)];}else if(a<112.5){n1=mag[(y-1)*w+x];n2=mag[(y+1)*w+x];}else{n1=mag[(y-1)*w+(x-1)];n2=mag[(y+1)*w+(x+1)];}var m=mag[y*w+x];o[y*w+x]=(m>=n1&&m>=n2)?m:0;}}return o;}
 
-function hysteresis(s,w,h,lo,hi){const o=new Uint8Array(w*h);for(let i=0;i<w*h;i++){if(s[i]>=hi)o[i]=255;else if(s[i]>=lo)o[i]=128;}for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){if(o[y*w+x]===128){const c=o[(y-1)*w+(x-1)]===255||o[(y-1)*w+x]===255||o[(y-1)*w+(x+1)]===255||o[y*w+(x-1)]===255||o[y*w+(x+1)]===255||o[(y+1)*w+(x-1)]===255||o[(y+1)*w+x]===255||o[(y+1)*w+(x+1)]===255;o[y*w+x]=c?255:0;}}return o;}
+function hysteresis(s,w,h,lo,hi,o){if(!o)o=new Uint8Array(w*h);for(var i=0;i<w*h;i++){if(s[i]>=hi)o[i]=255;else if(s[i]>=lo)o[i]=128;else o[i]=0;}for(var y=1;y<h-1;y++)for(var x=1;x<w-1;x++){if(o[y*w+x]===128){var c=o[(y-1)*w+(x-1)]===255||o[(y-1)*w+x]===255||o[(y-1)*w+(x+1)]===255||o[y*w+(x-1)]===255||o[y*w+(x+1)]===255||o[(y+1)*w+(x-1)]===255||o[(y+1)*w+x]===255||o[(y+1)*w+(x+1)]===255;o[y*w+x]=c?255:0;}}return o;}
 
-function hough(edges,w,h,thresh,minLen,maxGap){
-  const diag=Math.sqrt(w*w+h*h)|0,TS=180,acc=new Int32Array(diag*2*TS);
-  const cosT=new Float32Array(TS),sinT=new Float32Array(TS);
-  for(let t=0;t<TS;t++){cosT[t]=Math.cos(t*Math.PI/180);sinT[t]=Math.sin(t*Math.PI/180);}
+// Lookup-Tabellen einmalig beim Laden berechnen
+const _HOUGH_TS=180;
+const _cosT=new Float32Array(_HOUGH_TS);
+const _sinT=new Float32Array(_HOUGH_TS);
+for(let _t=0;_t<_HOUGH_TS;_t++){_cosT[_t]=Math.cos(_t*Math.PI/180);_sinT[_t]=Math.sin(_t*Math.PI/180);}
+
+function hough(edges,w,h,thresh,minLen,maxGap,acc,vis){
+  var TS=_HOUGH_TS, cosT=_cosT, sinT=_sinT;
+  var diag=Math.sqrt(w*w+h*h)|0;
+  if(!acc)acc=new Int32Array(diag*2*TS);
+  else{for(var _c=0;_c<acc.length;_c++)acc[_c]=0;}
   const pts=[];for(let y=0;y<h;y++)for(let x=0;x<w;x++)if(edges[y*w+x]>0)pts.push(x,y);
   for(let i=0;i<pts.length;i+=2){const x=pts[i],y=pts[i+1];for(let t=0;t<TS;t++){const r=(x*cosT[t]+y*sinT[t])|0,ri=r+diag;if(ri>=0&&ri<diag*2)acc[ri*TS+t]++;}}
-  const vis=new Uint8Array(diag*2*TS),peaks=[];
+  if(!vis)vis=new Uint8Array(diag*2*TS);else{for(var _v=0;_v<vis.length;_v++)vis[_v]=0;}
+  var peaks=[];
   for(let ri=0;ri<diag*2;ri++)for(let t=0;t<TS;t++){if(acc[ri*TS+t]>=thresh&&!vis[ri*TS+t]){peaks.push([ri-diag,t,acc[ri*TS+t]]);for(let dr=-4;dr<=4;dr++)for(let dt=-4;dt<=4;dt++){const nr=ri+dr,nt=((t+dt)%TS+TS)%TS;if(nr>=0&&nr<diag*2)vis[nr*TS+nt]=1;}}}
   peaks.sort((a,b)=>b[2]-a[2]);
   const lines=[];
@@ -630,7 +638,7 @@ function startLoop(){
 
   function frame(){
     // Sicherheitsnetz: nach 5 Fehlern aufhören
-    if(frameErrors>5){log('Loop gestoppt nach '+frameErrors+' Fehlern','w');return;}
+    // frameErrors nur loggen, nie stoppen
 
     // Video-Check
     if(!vid.videoWidth||vid.readyState<2){
@@ -647,23 +655,24 @@ function startLoop(){
       var px=imgd.data;
 
       // Graustufen
-      var gray=new Uint8Array(PW*PH);
+      // Graustufen in pre-allokierten Buffer
       for(var i=0;i<PW*PH;i++)
-        gray[i]=(px[i*4]*77+px[i*4+1]*150+px[i*4+2]*29)>>8;
+        _gray[i]=(px[i*4]*77+px[i*4+1]*150+px[i*4+2]*29)>>8;
+      var gray=_gray;
 
-      // CV-Pipeline
-      var work=p.useClahe?clahe(gray,PW,PH):gray;
-      var blurred=gaussBlur(work,PW,PH);
-      var sa=sobel(blurred,PW,PH);
-      var nm=nms(sa.mag,sa.ang,PW,PH);
-      var edges=hysteresis(nm,PW,PH,p.cannyLow,p.cannyHigh);
+      // CV-Pipeline — pre-allokierte Buffer, kein GC
+      var work=p.useClahe?clahe(gray,PW,PH):gray;  // clahe allokiert intern, selten
+      gaussBlur(work,PW,PH,_blurred);
+      sobel(_blurred,PW,PH,_mag,_ang);
+      nms(_mag,_ang,PW,PH,_nms);
+      hysteresis(_nms,PW,PH,p.cannyLow,p.cannyHigh,_edges);
 
       // ROI-Maske
       for(var y=0;y<roiY;y++)
-        for(var x=0;x<PW;x++) edges[y*PW+x]=0;
+        for(var x=0;x<PW;x++) _edges[y*PW+x]=0;
 
       // Linienerkennung
-      var raw=hough(edges,PW,PH,p.hough,8,6);
+      var raw=hough(_edges,PW,PH,p.hough,8,6,_acc,_vis);
       var cl=classifyLines(raw);
 
       trackLane(trL, cl.bestL?cl.bestL.xB:null, !!cl.bestL);
@@ -787,36 +796,31 @@ function startLoop(){
       // Offset
       var latOff=smCx!==null?Math.round((smCx-PW/2)/PW*300):0;
 
-      // UI
-      document.getElementById('detPill').className='det-pill '+(det?'found':'lost');
-      document.getElementById('detTxt').textContent=det
-        ?(both?'BEIDE SPUREN ('+raw.length+')':'EINE SPUR ('+raw.length+')'):'KEINE LINIE';
-      document.getElementById('confFill').style.width=conf+'%';
-      document.getElementById('confPct').textContent=conf+'%';
-      document.getElementById('hFps').textContent=fps;
-      document.getElementById('hT').textContent=procTime;
-      document.getElementById('hF').textContent=frameCount;
+      // ── UI — nur verifizierte IDs ──────────────────────────────
+      // HUD oben
+      _s('detPill','className','det-pill '+(det?'found':'lost'));
+      _t('detTxt', det?(both?'BEIDE SPUREN ('+raw.length+')':'EINE SPUR ('+raw.length+')'):'KEINE LINIE');
+      _s('confFill','style.width',conf+'%');
+      _t('confPct', conf+'%');
+      _t('hFps', fps);
+      _t('hT',  procTime+' ms');
+      _t('hF',  frameCount);
+      // Offset-Balken
       if(smCx!==null){
         var op=Math.max(5,Math.min(95,50+(latOff/300)*50)),ww=Math.abs(latOff)>40;
-        document.getElementById('offDot').style.left=op+'%';
-        document.getElementById('offDot').className='off-dot'+(ww?' w':'');
-        document.getElementById('offVal').textContent=(latOff>=0?'+':'')+latOff+' mm';
-        document.getElementById('offVal').className='off-val'+(ww?' w':'');
-      }else{document.getElementById('offVal').textContent='-- mm';}
+        _s('offDot','style.left',op+'%');
+        _s('offDot','className','off-dot'+(ww?' w':''));
+        _t('offVal',(latOff>=0?'+':'')+latOff+' mm');
+        _s('offVal','className','off-val'+(ww?' w':''));
+      }else{ _t('offVal','-- mm'); }
+      // Daten-Panel (nur IDs die existieren)
       var rate=frameCount?Math.round(hitCount/frameCount*100):0;
       var avgC=hitCount?Math.round(totalConf/hitCount):0;
-      document.getElementById('dFr').textContent=frameCount;
-      document.getElementById('dRate').textContent=rate+'%';
-      document.getElementById('dConf').textContent=avgC+'%';
-      document.getElementById('dProc').textContent=procTime+' ms';
-      document.getElementById('dLn').textContent=totalLines;
-      document.getElementById('dFps').textContent=fps;
-      document.getElementById('qOff').textContent=smCx!==null?(latOff>=0?'+':'')+latOff+' mm':'--';
-      document.getElementById('qOffB').className='qb '+(Math.abs(latOff)<40?'ok':'w');
-      document.getElementById('qOffB').textContent=Math.abs(latOff)<40?'OK':'WARN';
-      document.getElementById('qCnt').textContent=raw.length||'--';
-      document.getElementById('qStr').textContent=det?conf+'%':'--';
-      document.getElementById('qLast').textContent=lastHit;
+      _t('dFr',   frameCount);
+      _t('dRate', rate+'%');
+      _t('dConf', avgC+'%');
+      _t('dProc', procTime+' ms');
+      _t('dFps',  fps);
 
     }catch(err){
       frameErrors++;
@@ -827,6 +831,26 @@ function startLoop(){
     animId=requestAnimationFrame(frame);
   }
 
+  // Sichere DOM-Helfer — null-safe, nie Exception
+  function _t(id,val){var e=document.getElementById(id);if(e)e.textContent=val;}
+  function _s(id,prop,val){
+    var e=document.getElementById(id);if(!e)return;
+    var parts=prop.split('.');
+    if(parts.length===1){e[prop]=val;}
+    else{e[parts[0]][parts[1]]=val;}
+  }
+  // ── Pre-allokierte Buffer — kein GC-Druck in frame() ──────────────
+  var _gray    = new Uint8Array(PW*PH);
+  var _work    = new Uint8Array(PW*PH);
+  var _blurred = new Uint8Array(PW*PH);
+  var _mag     = new Float32Array(PW*PH);
+  var _ang     = new Float32Array(PW*PH);
+  var _nms     = new Float32Array(PW*PH);
+  var _edges   = new Uint8Array(PW*PH);
+  var _diag    = (Math.sqrt(PW*PW+PH*PH)|0);
+  var _acc     = new Int32Array(_diag*2*180);
+  var _vis     = new Uint8Array(_diag*2*180);
+  log('Buffer pre-allokiert: '+Math.round((_diag*2*180*5+PW*PH*6)/1024)+' KB','ok');
   log('Loop startet...','ok');
   animId=requestAnimationFrame(frame);
 }
