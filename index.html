@@ -487,6 +487,12 @@ async function startCam(){
     document.getElementById('roadBg').style.display='none';
     document.getElementById('roadLine').style.display='none';
     await new Promise(r=>{vid.onloadedmetadata=r;});
+    try{await vid.play();}catch(pe){log('Autoplay blockiert: '+pe.message,'w');}
+    // Warten bis wirklich Frames kommen (readyState >= 2)
+    await new Promise(r=>{
+      if(vid.readyState>=2)return r();
+      vid.addEventListener('canplay',r,{once:true});
+    });
     document.getElementById('hRes').textContent=vid.videoWidth+'x'+vid.videoHeight;
     log('Kamera: '+(facing==='user'?'Front':'Rear')+' '+vid.videoWidth+'x'+vid.videoHeight,'ok');
     startLoop();
@@ -554,6 +560,13 @@ function hough(edges,w,h,thresh,minLen,maxGap){
 function startLoop(){
   if(animId)cancelAnimationFrame(animId);
   log('CV-Pipeline v7 gestartet','ok');
+  // Page Visibility: Loop nach Tab-Wechsel wieder starten
+  document.addEventListener('visibilitychange',function(){
+    if(!document.hidden&&!animId){
+      log('Tab aktiv — Loop neu gestartet','i');
+      animId=requestAnimationFrame(frame);
+    }
+  });
 
   const vid=document.getElementById('vid'),proc=document.getElementById('proc'),disp=document.getElementById('disp');
   const ctxP=proc.getContext('2d',{willReadFrequently:true}),ctxD=disp.getContext('2d');
@@ -623,7 +636,12 @@ function startLoop(){
   }
 
   function frame(){
-    if(!vid.videoWidth||vid.readyState<2){animId=requestAnimationFrame(frame);return;}
+    // Auf Mobile kann readyState kurz unter 2 fallen — nicht stoppen, warten
+    if(!vid.videoWidth){animId=requestAnimationFrame(frame);return;}
+    if(vid.readyState<2){
+      // Video kurz nicht bereit — Loop am Leben halten, nicht verarbeiten
+      animId=requestAnimationFrame(frame);return;
+    }
     resizeCv();
     const t0=performance.now();
 
