@@ -733,13 +733,39 @@ function startLoop(){
       ctxD.beginPath();ctxD.moveTo(0,sy(roiY));ctxD.lineTo(DW,sy(roiY));
       ctxD.stroke();ctxD.setLineDash([]);
 
-      // Rohe Linien
+      // Rohe Linien (alle dim)
       var allRaw=cl.allL.concat(cl.allR,cl.allC);
       for(var i=0;i<allRaw.length;i++){
         var l=allRaw[i];
-        ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.18)';ctxD.lineWidth=1;
+        ctxD.save();ctxD.strokeStyle='rgba(0,200,255,0.15)';ctxD.lineWidth=1;
         ctxD.beginPath();ctxD.moveTo(sx(l.x1),sy(l.y1));ctxD.lineTo(sx(l.x2),sy(l.y2));
         ctxD.stroke();ctxD.restore();
+      // ── Erkannte Best-Linien hervorheben ──────────────────
+      // Blaue transparente Überlagerung direkt auf der Hough-Linie
+      var bestLines=[];
+      if(cl.bestL) bestLines.push({l:cl.bestL,side:'L'});
+      if(cl.bestR && cl.bestR!==cl.bestL) bestLines.push({l:cl.bestR,side:'R'});
+      for(var bi=0;bi<bestLines.length;bi++){
+        var bl=bestLines[bi].l, bs=bestLines[bi].side;
+        var isCtr=(bs==='L'&&!cl.allL.length)||(bs==='R'&&!cl.allR.length);
+        ctxD.save();
+        // Breiter blauer Schimmer — direkt auf der erkannten Linie
+        ctxD.strokeStyle=isCtr?'rgba(255,200,0,0.55)':'rgba(0,160,255,0.55)';
+        ctxD.lineWidth=10;
+        ctxD.lineCap='round';
+        ctxD.shadowColor=isCtr?'rgba(255,200,0,0.4)':'rgba(0,160,255,0.4)';
+        ctxD.shadowBlur=14;
+        ctxD.beginPath();
+        ctxD.moveTo(sx(bl.x1),sy(bl.y1));
+        ctxD.lineTo(sx(bl.x2),sy(bl.y2));
+        ctxD.stroke();
+        // Schmalere helle Kernlinie darüber
+        ctxD.strokeStyle=isCtr?'rgba(255,230,80,0.85)':'rgba(80,200,255,0.85)';
+        ctxD.lineWidth=2;
+        ctxD.shadowBlur=0;
+        ctxD.stroke();
+        ctxD.restore();
+      }
       }
 
       // Spur-Füllung
