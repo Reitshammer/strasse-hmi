@@ -1,33 +1,74 @@
-# RoadVision Live
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#070b0e"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="Lokale Live-Erkennung von Fahrbahnmarkierungen direkt auf dem Smartphone.">
+  <link rel="manifest" href="./manifest.webmanifest"><link rel="icon" href="./icon.svg" type="image/svg+xml"><link rel="stylesheet" href="./styles.css">
+  <title>RoadVision Live</title>
+</head>
+<body>
+<div id="app" class="app-shell">
+  <header class="topbar">
+    <a class="brand" href="#" aria-label="RoadVision Live"><span class="brand-mark"><i></i><i></i></span><span><strong>ROADVISION</strong><small>LIVE</small></span></a>
+    <div class="top-actions"><span class="privacy-pill"><span></span>Lokal · Privat</span><button id="cameraFlip" class="icon-button" type="button" aria-label="Kamera wechseln"><svg viewBox="0 0 24 24"><path d="M20 7h-3.2l-1.7-2H8.9L7.2 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2Zm-8 10a4 4 0 1 1 0-8 4 4 0 0 1 0 8Zm0-1.7a2.3 2.3 0 1 0 0-4.6 2.3 2.3 0 0 0 0 4.6Z"/></svg></button></div>
+  </header>
 
-Mobile Web-App zur lokalen Live-Erkennung von Fahrbahnmarkierungen. Die Aufnahmen werden ausschließlich im Smartphone-Browser verarbeitet und nicht hochgeladen.
+  <main class="main-stage">
+    <section id="liveView" class="view active">
+      <div id="visionFrame" class="vision-frame idle">
+        <video id="cameraVideo" playsinline muted></video><canvas id="visionCanvas" aria-label="Kamerabild mit erkannter Fahrbahnmarkierung"></canvas><div class="vignette"></div><div class="scan-line"></div>
+        <div class="vision-top"><div class="vision-status-group"><div id="statusBadge" class="status-badge searching"><span class="status-dot"></span><span id="statusText">BEREIT ZUM START</span></div><div id="targetBadge" class="target-badge">ZIEL · MITTE</div></div><div class="fps-badge"><span id="fpsValue">—</span> FPS</div></div>
+        <div id="laneHud" class="lane-hud hidden"><div class="measurement-label">ABWEICHUNG ZUR SOLLPOSITION</div><div class="measurement-row"><span id="directionArrow" class="direction-arrow">↔</span><strong id="offsetValue">0</strong><span class="unit">cm</span></div><div id="directionText" class="direction-text">AUF SOLLPOSITION</div></div>
 
-## Auf GitHub Pages veröffentlichen
+        <div id="introPanel" class="intro-panel">
+          <div class="intro-kicker"><span></span>ON-DEVICE COMPUTER VISION</div><h1>Markierungen.<br><em>Live erkannt.</em></h1>
+          <p>Eine gezielt ausgewählte Fahrbahnmarkierung und ihre seitliche Abweichung direkt am Smartphone auswerten. Kein Upload. Keine Cloud.</p>
+          <div class="intro-actions"><button id="startCamera" class="primary-button" type="button"><svg viewBox="0 0 24 24"><path d="M8.5 6 10 4h4l1.5 2H19a3 3 0 0 1 3 3v8a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V9a3 3 0 0 1 3-3h3.5ZM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0-2a2 2 0 1 1 0-4 2 2 0 0 1 0 4Z"/></svg>Kamera starten</button><button id="startDemo" class="secondary-button" type="button"><svg viewBox="0 0 24 24"><path d="m8 5 11 7-11 7V5Z"/></svg>Demo ansehen</button></div>
+          <div class="intro-note"><svg viewBox="0 0 24 24"><path d="M12 2 4 5v6c0 5.1 3.4 9.9 8 11 4.6-1.1 8-5.9 8-11V5l-8-3Zm0 4.2 4 1.5V11c0 3.1-1.8 6.3-4 7.3-2.2-1-4-4.2-4-7.3V7.7l4-1.5Z"/></svg>Alle Videodaten bleiben auf diesem Gerät</div>
+        </div>
 
-1. Den Inhalt dieses Ordners in ein neues GitHub-Repository hochladen.
-2. In GitHub **Settings → Pages → Build and deployment → Source** auf **GitHub Actions** stellen.
-3. Unter **Actions** den automatisch gestarteten Ablauf abwarten.
-4. Die angezeigte HTTPS-Adresse am Smartphone öffnen und den Kamerazugriff erlauben.
+        <div id="cameraError" class="error-panel hidden" role="alert"><span class="error-icon">!</span><div><strong>Kamera konnte nicht gestartet werden</strong><p id="cameraErrorText">Bitte Kamerazugriff erlauben.</p></div><button id="retryCamera" class="small-button" type="button">Erneut versuchen</button><button id="errorDemo" class="small-button" type="button">Demo starten</button></div>
+        <div id="orientationHint" class="orientation-hint hidden"><svg viewBox="0 0 24 24"><path d="M7 1h10a2 2 0 0 1 2 2v18a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V3a2 2 0 0 1 2-2Zm5 19.5a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z"/></svg>Für beste Erkennung Smartphone quer montieren</div>
+        <div id="liveControls" class="live-controls hidden"><button id="pauseButton" class="control-button" type="button"><span class="pause-icon"></span><span>Pausieren</span></button><div class="mode-readout"><span></span><strong id="modeName">LIVE</strong><small id="modeDetail">Rückkamera</small></div><button id="stopButton" class="control-button danger" type="button"><span class="stop-icon"></span><span>Beenden</span></button></div>
+      </div>
 
-## Sicherer Fahrtest
+      <div class="telemetry-strip"><article><span id="targetIcon" class="telemetry-icon cyan">M</span><div><small>AUSGEWÄHLTE ZIELLINIE</small><strong id="targetName">MITTE</strong></div></article><article><span class="telemetry-icon green">1</span><div><small>ERKENNUNGSSTATUS</small><strong id="targetStatus">—</strong></div></article><article class="confidence-card"><div><small>ERKENNUNGSSICHERHEIT</small><strong><span id="confidenceValue">0</span>%</strong></div><div class="confidence-track"><i id="confidenceBar"></i></div></article></div>
+      <div class="offset-card"><div class="offset-card-head"><span>Abweichung zur gewählten Referenzlinie</span><strong id="offsetSummary">Noch keine Messung</strong></div><div class="offset-scale"><span>−150</span><span>−75</span><span>0</span><span>+75</span><span>+150</span><div class="safe-zone"></div><i id="offsetNeedle"></i></div></div>
+    </section>
 
-- Smartphone stabil und vibrationsarm mittig hinter der Windschutzscheibe montieren.
-- Querformat verwenden; Motorhaube und Himmel möglichst außerhalb der grünen Erkennungszone lassen.
-- Die Bedienung erfolgt nur im Stillstand oder durch einen Beifahrer.
-- Vor der Kundenfahrt dieselbe Strecke bei ähnlichem Licht testen und im Reiter **Kalibrierung** anpassen.
+    <section id="calibrationView" class="view settings-view">
+      <div class="section-head"><div><span class="eyebrow">SCHRITT 1 VON 2</span><h2>Bildbereich kalibrieren</h2><p>Richte die Erkennungszone auf die Fahrbahn vor dem Fahrzeug aus.</p></div><button class="help-button" data-help="calibration" type="button">?</button></div>
+      <div class="calibration-preview"><canvas id="calibrationCanvas"></canvas><div class="calibration-empty">Live-Vorschau nach Kamera- oder Demostart</div></div>
+      <div class="setting-card"><label for="roiTop"><span><strong>Horizont / Zonenbeginn</strong><small>Oberkante des auszuwertenden Straßenbereichs</small></span><output id="roiTopOutput">44 %</output></label><input id="roiTop" type="range" min="30" max="65" value="44"></div>
+      <div class="setting-card"><label for="roiWidth"><span><strong>Breite am Horizont</strong><small>Trapez an Kameraposition und Straße anpassen</small></span><output id="roiWidthOutput">22 %</output></label><input id="roiWidth" type="range" min="10" max="45" value="22"></div>
+      <div class="calibration-actions"><button id="resetCalibration" class="secondary-button" type="button">Standardwerte</button><button id="calibrationDone" class="primary-button" type="button">Kalibrierung übernehmen</button></div>
+    </section>
 
-## Unterstützte Browser
+    <section id="settingsView" class="view settings-view">
+      <div class="section-head"><div><span class="eyebrow">ROADVISION SETUP</span><h2>Erkennung einstellen</h2><p>Die Standardwerte sind für Tageslicht und normale Fahrbahnmarkierungen optimiert.</p></div></div>
+      <div class="target-card">
+        <div class="target-card-head"><span><strong>Welche Linie soll erkannt werden?</strong><small>Die App verfolgt ausschließlich die ausgewählte Position im Kamerabild.</small></span><button class="mini-help" data-help="targetLine" type="button">?</button></div>
+        <div class="line-selector" role="radiogroup" aria-label="Zu erkennende Linie">
+          <label><input type="radio" name="targetLine" value="left"><span>L</span><strong>Links</strong></label>
+          <label><input type="radio" name="targetLine" value="center"><span>M</span><strong>Mitte</strong></label>
+          <label><input type="radio" name="targetLine" value="right"><span>R</span><strong>Rechts</strong></label>
+        </div>
+        <p class="target-note">Die Position bezieht sich auf das Kamerabild – nicht auf die rechtliche Bedeutung der Markierung.</p>
+      </div>
+      <div class="settings-grid">
+        <div class="setting-card"><label for="brightness"><span><strong>Mindesthelligkeit</strong><small>Für weiße und helle Markierungen</small></span><button class="mini-help" data-help="brightness" type="button">?</button><output id="brightnessOutput">170</output></label><input id="brightness" type="range" min="110" max="235" value="170"></div>
+        <div class="setting-card"><label for="edgeThreshold"><span><strong>Kantenempfindlichkeit</strong><small>Kontrast zur Fahrbahnoberfläche</small></span><button class="mini-help" data-help="edge" type="button">?</button><output id="edgeThresholdOutput">28</output></label><input id="edgeThreshold" type="range" min="10" max="65" value="28"></div>
+        <div class="setting-card"><label for="smoothing"><span><strong>Stabilisierung</strong><small>Beruhigt die Anzeige bei Vibrationen</small></span><button class="mini-help" data-help="smoothing" type="button">?</button><output id="smoothingOutput">82 %</output></label><input id="smoothing" type="range" min="35" max="95" value="82"></div>
+        <div class="setting-card"><label for="laneWidth"><span><strong>Referenz-Spurbreite</strong><small>Zur Schätzung des seitlichen Versatzes</small></span><button class="mini-help" data-help="laneWidth" type="button">?</button><output id="laneWidthOutput">300 cm</output></label><input id="laneWidth" type="range" min="220" max="400" step="5" value="300"></div>
+      </div>
+      <div class="options-card"><label class="switch-row"><span><strong>Präsentationsmodus</strong><small>Größere Statusanzeige</small></span><input id="presentationMode" type="checkbox" checked><i></i></label><label class="switch-row"><span><strong>Gelbe Markierungen erkennen</strong><small>Zusätzlich zu weißen Markierungen</small></span><input id="yellowLines" type="checkbox" checked><i></i></label><label class="switch-row"><span><strong>Bildschirm wach halten</strong><small>Während einer laufenden Erkennung</small></span><input id="wakeLock" type="checkbox" checked><i></i></label></div>
+      <div class="settings-actions"><button id="installButton" class="secondary-button hidden" type="button">App installieren</button><button id="resetSettings" class="secondary-button" type="button">Werkseinstellungen</button><button id="saveSettings" class="primary-button" type="button">Speichern</button></div><p class="version-line">RoadVision Live · Version 1.1 · Einzelmarkierungs-Erkennung · Verarbeitung ausschließlich auf dem Gerät</p>
+    </section>
+  </main>
 
-- Android: aktuelle Version von Chrome oder Edge
-- iPhone: aktuelle Version von Safari; über **Teilen → Zum Home-Bildschirm** installierbar
-
-Kamerazugriff funktioniert im Browser nur über HTTPS. GitHub Pages stellt HTTPS automatisch bereit.
-
-## Funktionen
-
-- Live-Erkennung weißer und optional gelber Fahrbahnmarkierungen
-- stabilisierte Versatzanzeige mit Status für linke/rechte Markierung
-- Kalibrierungs- und Einstellreiter mit Hilfetexten
-- integrierter Demo-Modus für Präsentationen
-- offline startbar, nachdem die App einmal geladen wurde
-- keine Cloud-Verarbeitung und keine externen Bibliotheken zur Laufzeit
+  <nav class="bottom-nav" aria-label="Hauptnavigation"><button class="nav-button active" data-view="liveView" type="button"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3V5Zm2 2v10h14V7H5Zm2 8 3.2-4 2.4 2.6 2-2.4L18 15H7Z"/></svg><span>Live</span></button><button class="nav-button" data-view="calibrationView" type="button"><svg viewBox="0 0 24 24"><path d="M4 3h2v3H3V4a1 1 0 0 1 1-1Zm14 0h2a1 1 0 0 1 1 1v2h-3V3ZM3 18h3v3H4a1 1 0 0 1-1-1v-2Zm15 0h3v2a1 1 0 0 1-1 1h-2v-3ZM7 7h10v10H7V7Zm2 2v6h6V9H9Z"/></svg><span>Kalibrierung</span></button><button class="nav-button" data-view="settingsView" type="button"><svg viewBox="0 0 24 24"><path d="m13.7 2 .5 2a8 8 0 0 1 1.6.9l2-.6 1.7 3-1.5 1.4a7 7 0 0 1 0 3.4l1.5 1.4-1.7 3-2-.6a8 8 0 0 1-1.6.9l-.5 2h-3.4l-.5-2a8 8 0 0 1-1.6-.9l-2 .6-1.7-3L6 12.1a7 7 0 0 1 0-3.4L4.5 7.3l1.7-3 2 .6a8 8 0 0 1 1.6-.9l.5-2h3.4ZM12 7.5a3 3 0 1 0 0 6 3 3 0 0 0 0-6Z"/></svg><span>Einstellungen</span></button></nav>
+  <div id="helpModal" class="modal hidden" role="dialog" aria-modal="true"><button class="modal-backdrop" data-close-modal aria-label="Schließen"></button><div class="modal-card"><button class="modal-close" data-close-modal aria-label="Schließen">×</button><span class="eyebrow">KURZ ERKLÄRT</span><h3 id="helpTitle">Einstellung</h3><p id="helpText"></p><button class="primary-button" data-close-modal type="button">Verstanden</button></div></div><div id="toast" class="toast" role="status"></div>
+</div>
+<script src="./app.js" defer></script>
+</body></html>

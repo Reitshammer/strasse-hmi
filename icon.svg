@@ -1,1 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><defs><linearGradient id="g"><stop stop-color="#56f5c2"/><stop offset="1" stop-color="#10a7d3"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="#070b0e"/><path d="M112 422 216 90h80l104 332h-70l-31-102h-86l-31 102h-70Zm119-163h50l-25-91-25 91Z" fill="url(#g)"/><path d="M84 118h72M356 118h72" stroke="#fff" stroke-width="22" stroke-linecap="round"/></svg>
+name: RoadVision veröffentlichen
+on:
+  push: { branches: [main] }
+  workflow_dispatch:
+permissions: { contents: read, pages: write, id-token: write }
+concurrency: { group: pages, cancel-in-progress: true }
+jobs:
+  deploy:
+    environment: { name: github-pages, url: "${{ steps.deployment.outputs.page_url }}" }
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: . }
+      - id: deployment
+        uses: actions/deploy-pages@v4
