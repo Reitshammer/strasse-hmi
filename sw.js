@@ -1,5 +1,5 @@
-const CACHE="roadvision-live-v3-single-line-1-2-0";
-const VERSION="1.2.0";
+const CACHE="roadvision-live-v4-output-switch-1-3-0";
+const VERSION="1.3.0";
 const FILES=["./","./index.html","./styles.css?v="+VERSION,"./app.js?v="+VERSION,"./icon.svg","./manifest.webmanifest?v="+VERSION];
 
 self.addEventListener("install",event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(FILES)).then(()=>self.skipWaiting())));

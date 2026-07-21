@@ -13,3 +13,45 @@
 @media(max-width:720px){.topbar{height:55px}.privacy-pill{font-size:9px;padding:6px 8px}.main-stage{padding:9px 8px 20px}.vision-frame{min-height:58vh;border-radius:16px}.vision-top{left:10px;right:10px;top:10px}.status-badge,.fps-badge,.target-badge{font-size:8px;padding:7px 9px}.lane-hud{right:10px;bottom:71px;width:155px;padding:12px}.measurement-row strong{font-size:38px}.intro-panel{padding:44px 16px 24px}.intro-panel h1{font-size:clamp(37px,12vw,58px)}.intro-panel p{font-size:12px;max-width:380px}.intro-actions{margin-top:17px}.primary-button,.secondary-button{min-height:42px;padding:10px 13px;font-size:11px}.live-controls{min-width:335px;max-width:calc(100% - 18px);bottom:9px}.telemetry-strip{grid-template-columns:1fr 1fr}.confidence-card{grid-column:1/-1;min-height:53px!important}.confidence-track{max-width:48%}.settings-grid{grid-template-columns:1fr}.target-card{grid-template-columns:1fr}.target-note{grid-column:auto}.settings-view{padding:11px 4px}.calibration-preview{aspect-ratio:16/9}}
 @media(orientation:landscape) and (max-height:600px){.app-shell{padding-bottom:calc(57px + var(--safe-bottom))}.topbar{height:44px;position:relative}.main-stage{padding:7px 9px 10px}.vision-frame{min-height:calc(100dvh - 112px);border-radius:14px}.telemetry-strip,.offset-card{display:none}.bottom-nav{height:calc(51px + var(--safe-bottom));padding-top:3px}.nav-button{height:43px;min-width:85px;flex-direction:row;gap:6px}.nav-button svg{width:16px}.intro-panel{padding:27px 19px 14px}.intro-panel h1{font-size:clamp(33px,8vw,55px);margin:9px 0 6px}.intro-panel p{font-size:11px}.intro-actions{margin-top:12px}.intro-note{margin-top:9px}.lane-hud{bottom:11px}.live-controls{left:13px;bottom:9px;transform:none;min-width:330px}.settings-view{max-width:1000px;padding-top:7px}.settings-grid{grid-template-columns:repeat(4,1fr)}.section-head h2{font-size:24px}.section-head p{display:none}.calibration-preview{aspect-ratio:16/5}}
 @media(max-width:430px) and (orientation:portrait){.privacy-pill{display:none}.target-badge{display:none}.vision-frame{min-height:64vh}.intro-actions{flex-direction:column;width:min(290px,100%)}.intro-actions button{width:100%}.lane-hud{bottom:77px}.live-controls{min-width:0;width:calc(100% - 16px)}.control-button span:last-child{display:none}.telemetry-strip article{padding:10px;gap:8px}.line-selector label{min-height:55px;gap:5px;flex-direction:column}.nav-button{min-width:0;flex:1}.calibration-actions,.settings-actions{flex-wrap:wrap}.error-panel{grid-template-columns:auto 1fr}.error-panel .small-button{grid-column:2}}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}
+
+/* Version 1.3: sichtbare Schaltpunkte und kompakte Querformat-Anzeige */
+.telemetry-strip{grid-template-columns:1fr 1fr 1.35fr 1fr}.confidence-card{min-width:0}.confidence-meter{flex:1;max-width:190px;min-width:120px;padding-top:14px}.confidence-track{position:relative;max-width:none;overflow:visible}.confidence-track i{border-radius:10px}.switch-marker{position:absolute;top:-8px;width:2px;height:21px;transform:translateX(-1px);border-radius:2px;z-index:2}.switch-marker:before{content:"";position:absolute;left:50%;top:-3px;width:6px;height:6px;transform:translateX(-50%) rotate(45deg);background:currentColor}.switch-marker.off{color:var(--red);background:var(--red)}.switch-marker.on{color:var(--green);background:var(--green)}.threshold-labels{position:relative;height:15px;margin-top:8px;color:#78898e;font-size:7px;font-weight:900;letter-spacing:.04em;white-space:nowrap}.threshold-labels span{position:absolute;transform:translateX(-50%)}.threshold-labels span:first-child{color:#d89595}.threshold-labels span:last-child{color:#82d9bd}.output-card{transition:border-color .2s,background .2s,box-shadow .2s}.output-card em{display:block;margin-top:3px;color:#7b8b90;font-size:8px;font-style:normal;line-height:1.3}.output-lamp{width:32px;height:32px;display:grid;place-items:center;flex:0 0 auto;border-radius:9px;color:#8a999e;background:#242e33;border:1px solid rgba(255,255,255,.1);font-size:11px;font-weight:950}.output-card.on{border-color:rgba(86,245,194,.5);background:linear-gradient(145deg,rgba(18,43,37,.96),rgba(9,23,21,.92));box-shadow:0 0 22px rgba(86,245,194,.08)}.output-card.on .output-lamp{color:#05110e;background:var(--green);border-color:var(--green);box-shadow:0 0 14px rgba(86,245,194,.45)}.output-card.on strong{color:var(--green)}.output-card.off strong{color:#a7b2b5}.switch-setting{border-color:rgba(86,245,194,.18)}
+
+@media(max-width:980px){.telemetry-strip{grid-template-columns:1fr 1fr}.confidence-card,.output-card{grid-column:1/-1}.confidence-meter{max-width:52%}}
+
+@media(orientation:landscape) and (max-height:600px){
+  #liveView.active{display:grid;grid-template-columns:minmax(0,1fr) clamp(230px,31vw,350px);grid-template-rows:minmax(0,1fr) auto;gap:7px 9px}
+  #liveView>.vision-frame{grid-column:1;grid-row:1/3;height:calc(100dvh - 118px - var(--safe-top) - var(--safe-bottom));min-height:170px}
+  #liveView>.telemetry-strip{display:grid!important;grid-column:2;grid-row:1;grid-template-columns:1fr 1fr;align-content:start;gap:5px;margin:0}
+  #liveView>.telemetry-strip article{min-height:43px;padding:6px 8px;gap:6px;border-radius:10px}
+  #liveView>.telemetry-strip small{font-size:6px;letter-spacing:.08em}
+  #liveView>.telemetry-strip strong{margin-top:2px;font-size:9px}
+  #liveView .telemetry-icon,#liveView .output-lamp{width:25px;height:25px;border-radius:7px;font-size:8px}
+  #liveView .confidence-card,#liveView .output-card{grid-column:1/-1}
+  #liveView .confidence-card{min-height:48px}
+  #liveView .confidence-card>div:first-child{min-width:73px}
+  #liveView .confidence-card strong{font-size:14px}
+  #liveView .confidence-meter{max-width:none;min-width:0;padding-top:10px}
+  #liveView .threshold-labels{height:12px;margin-top:6px;font-size:6px}
+  #liveView .output-card em{font-size:6px;margin-top:1px}
+  #liveView>.offset-card{display:block!important;grid-column:2;grid-row:2;margin:0;padding:8px 10px 10px;border-radius:10px}
+  #liveView .offset-card-head{margin-bottom:10px;gap:8px}
+  #liveView .offset-card-head span{font-size:6px;letter-spacing:.08em}
+  #liveView .offset-card-head strong{font-size:8px;text-align:right}
+  #liveView .offset-scale{margin:0 6px 13px}
+  #liveView .offset-scale>span{top:9px;font-size:6px}
+  .lane-hud{right:10px;bottom:58px;width:148px;padding:9px 11px}
+  .measurement-row strong{font-size:34px}.direction-text{margin-top:3px}
+}
+
+@media(orientation:landscape) and (max-height:380px){
+  #liveView>.vision-frame{height:calc(100dvh - 118px - var(--safe-top) - var(--safe-bottom));min-height:165px}
+  #liveView>.telemetry-strip article{min-height:36px;padding:4px 6px}
+  #liveView .confidence-card{min-height:40px}
+  #liveView .confidence-meter{padding-top:7px}
+  #liveView .switch-marker{top:-6px;height:17px}
+  #liveView .threshold-labels{margin-top:4px;height:9px}
+  #liveView .output-card em{display:none}
+  #liveView>.offset-card{padding:6px 8px 7px}
+  #liveView .offset-card-head{margin-bottom:8px}
+}
